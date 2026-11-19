@@ -70,6 +70,18 @@ net:
   failures_before_offline: 2
   canned_min_interval_s: 60
 
+# Prices for cadbot's own cost estimates (USD). claude-opus-5-5 list prices as of Nov 2026;
+# check https://www.anthropic.com/pricing and update if they change.
+pricing:
+  input_per_mtok: 4.00
+  output_per_mtok: 20.00
+  cache_write_per_mtok: 5.00
+  cache_read_per_mtok: 0.20
+  web_search_per_1k: 10.00
+
+account:
+  api_key_id: null          # cadbot's key id (apikey_...) for `cadbot.admin spend`; auto-found if null
+
 household:
   # Free text added to the system prompt, e.g. greeting habits and quiet hours.
   wishes: ""

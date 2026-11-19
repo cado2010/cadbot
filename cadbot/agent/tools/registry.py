@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from cadbot.people.registry import PeopleRegistry
     from cadbot.platform.base import Capabilities
     from cadbot.sensors.listener import Listener
+    from cadbot.usage import UsageLog
     from cadbot.vision.loop import VisionLoop
 
 HELP_CATEGORIES = (
@@ -73,6 +74,7 @@ class ToolContext:
     people: PeopleRegistry | None = None
     listener: Listener | None = None
     conversation: ConversationState = field(default_factory=ConversationState)
+    usage: UsageLog | None = None
 
 
 @dataclass(frozen=True)

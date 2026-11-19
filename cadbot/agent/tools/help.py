@@ -82,7 +82,8 @@ WEB_SEARCH_HELP = HelpInfo(
 
 
 def all_local_tools() -> list[Tool]:
-    from cadbot.agent.tools import face, people, speak, vision
+    from cadbot.agent.tools import costs, face, people, speak, vision
 
     return [face.SET_FACE, speak.TOOL, face.SET_FACE_PRESETS, TOOL,
-            vision.SET_WATCH_INTERVAL, vision.SET_LISTENING, vision.SET_GAZE, *people.ALL]
+            vision.SET_WATCH_INTERVAL, vision.SET_LISTENING, vision.SET_GAZE, *people.ALL,
+            costs.TOOL]

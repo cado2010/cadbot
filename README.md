@@ -80,6 +80,18 @@ on the PC either way, so cadbot still greets people by name when they talk to it
 `vision.enabled: false` switches the camera off completely. Set a monthly spend limit in the
 Claude Console too.
 
+**Checking what it costs.** cadbot logs the tokens of every request it makes and estimates the
+cost, split into talking and camera frames:
+
+```powershell
+uv run python -m cadbot.admin spend          # today, last 7 days, this month
+uv run python -m cadbot.admin spend --days 7 # account figures for the last 7 days
+```
+
+With an Admin API key in `.env` (`ANTHROPIC_ADMIN_KEY`, see `.env.example`) the same command
+also shows what Anthropic actually billed for cadbot's API key (a few hours behind). You can
+also ask cadbot: "How much have you cost today?"
+
 **Troubleshooting**
 
 - *`invalid peer certificate: UnknownIssuer` from uv:* something on the PC (antivirus, a

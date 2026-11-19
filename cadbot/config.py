@@ -109,6 +109,24 @@ class NetConfig(_Section):
     canned_min_interval_s: float = 60.0
 
 
+class PricingConfig(_Section):
+    """Prices for cost estimates, in USD. Defaults are claude-opus-5-5's list prices as of
+    Nov 2026; check https://www.anthropic.com/pricing and update if they change."""
+
+    input_per_mtok: float = 4.00
+    output_per_mtok: float = 20.00
+    cache_write_per_mtok: float = 5.00
+    """5-minute prompt-cache writes: 1.25x the input price."""
+    cache_read_per_mtok: float = 0.20
+    web_search_per_1k: float = 10.00
+
+
+class AccountConfig(_Section):
+    api_key_id: str | None = None
+    """The Console id of cadbot's API key (apikey_...), for `cadbot.admin spend`. Found
+    automatically from the key's hint when left empty."""
+
+
 class HouseholdConfig(_Section):
     wishes: str = ""
     """Free text for the system prompt: greeting habits, quiet hours, preferences."""
@@ -123,6 +141,8 @@ class Config(_Section):
     vision: VisionConfig = Field(default_factory=VisionConfig)
     net: NetConfig = Field(default_factory=NetConfig)
     household: HouseholdConfig = Field(default_factory=HouseholdConfig)
+    pricing: PricingConfig = Field(default_factory=PricingConfig)
+    account: AccountConfig = Field(default_factory=AccountConfig)
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

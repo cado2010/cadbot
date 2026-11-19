@@ -40,6 +40,7 @@ from cadbot.platform import Platform, get_platform
 from cadbot.sensors.listener import Listener, ListenerHooks
 from cadbot.sensors.stt import WhisperTranscriber
 from cadbot.sensors.vad import SegmenterConfig, SileroVad, SpeechSegmenter
+from cadbot.usage import UsageLog
 from cadbot.vision.faces import SFACE, YUNET, YuNetSFace
 from cadbot.vision.loop import FrameReader, VisionLoop
 
@@ -126,6 +127,7 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
                                         config.household.wishes, camera=camera_mode(config))
 
     people = open_people(platform, config)
+    usage = UsageLog(platform.paths.data_dir / "cadbot.db", config.pricing)
     vision = make_vision(platform, config, people, bus)
     if vision is not None:
         vision.on_gaze = face.set_gaze_point
@@ -134,12 +136,14 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
     def make_context(turn: TurnState) -> ToolContext:
         return ToolContext(speech=speech, face=face, capabilities=platform.capabilities,
                            config=config.agent, registry=registry, turn=turn, vision=vision,
-                           people=people if vision is not None else None, listener=listener)
+                           people=people if vision is not None else None, listener=listener,
+                           usage=usage)
 
     client = AnthropicClient(api_key, config.agent.request_timeout_s)
     agent = Agent(client=client, registry=registry, config=config.agent,
                   system_prompt=system_prompt, make_context=make_context, face=face,
-                  speech=speech, canned=canned, health=health, notifier=LogNotifier())
+                  speech=speech, canned=canned, health=health, notifier=LogNotifier(),
+                  usage_log=usage)
     agent.idle_after_s = config.face.idle_after_speech_s
     face.callbacks.on_stop = lambda: agent.interrupt("the stop button or the Esc key")
     face.callbacks.on_quit = runtime.stop.set
@@ -188,6 +192,7 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
         await audio_out.close()
         display.close()
         people.store.close()
+        usage.close()
     return 0
 
 

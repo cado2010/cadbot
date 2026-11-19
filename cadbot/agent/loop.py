@@ -29,11 +29,12 @@ from cadbot.agent.errors import (
 from cadbot.agent.executor import ToolExecutor
 from cadbot.agent.session import Session
 from cadbot.agent.tools.registry import ConversationState, ToolContext, ToolRegistry, TurnState
-from cadbot.bus import Event, EventBus, Utterance
+from cadbot.bus import Event, EventBus, Observation, Utterance
 from cadbot.config import AgentConfig
 from cadbot.face.renderer import Face
 from cadbot.net.health import HealthMonitor
 from cadbot.router import render_event
+from cadbot.usage import UsageLog
 
 log = logging.getLogger(__name__)
 
@@ -73,6 +74,7 @@ class Agent:
                  system_prompt: str, make_context: Callable[[TurnState], ToolContext],
                  face: Face, speech: SpeechOutput, canned: CannedClips, health: HealthMonitor,
                  notifier: OwnerNotifier, session: Session | None = None,
+                 usage_log: UsageLog | None = None,
                  sleep: Callable[[float], Awaitable[None]] = asyncio.sleep) -> None:
         self.client = client
         self.registry = registry
@@ -85,6 +87,7 @@ class Agent:
         self.health = health
         self.notifier = notifier
         self.session = session or Session()
+        self.usage_log = usage_log
         self.sleep = sleep
         self._notes: list[str] = []
         self._missed: list[Utterance] = []
@@ -179,6 +182,7 @@ class Agent:
                 if outcome is None:
                     return
                 message, executor = outcome
+                self._record_usage(event, message)
                 if message.stop_reason == "refusal":
                     log.warning("Claude declined (refusal): %s", getattr(
                         message, "stop_details", None))
@@ -251,6 +255,20 @@ class Agent:
                     if block is not None and block.type == "tool_use":
                         executor.submit(block)
             return await stream.get_final_message()
+
+    def _record_usage(self, event: Event, message: Any) -> None:
+        if self.usage_log is None or getattr(message, "usage", None) is None:
+            return
+        if isinstance(event, Utterance):
+            kind, snapshot = "speech", event.snapshot
+        elif isinstance(event, Observation):
+            kind, snapshot = "camera", event.snapshot
+        else:
+            kind, snapshot = "other", None
+        with_image = snapshot is not None and snapshot.jpeg is not None
+        cost = self.usage_log.record(kind, with_image, getattr(message, "model", self.cfg.model)
+                                     or self.cfg.model, message.usage)
+        log.debug("request cost about $%.4f (%s%s)", cost, kind, ", image" if with_image else "")
 
     # ------------------------------------------------------------------ failures
 
