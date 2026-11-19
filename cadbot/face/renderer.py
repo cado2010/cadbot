@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 SCALE = 4  # logical RoboEyes units -> screen pixels
 EYE_LOGICAL = (288, 120)
 EYE_AREA = pygame.Rect(64, 60, EYE_LOGICAL[0] * SCALE, EYE_LOGICAL[1] * SCALE)
-BASE_EYE = {"width": 54, "height": 58, "radius": 25, "spacing": 48}
+BASE_EYE = {"width": 38, "height": 41, "radius": 18, "spacing": 40}
 MOUTH_GAP = 20  # logical units between the bottom of the eyes and the mouth
 MOUTH_CENTRE = (EYE_AREA.centerx,
                 EYE_AREA.y + round((EYE_LOGICAL[1] / 2 + BASE_EYE["height"] / 2 + MOUTH_GAP)
