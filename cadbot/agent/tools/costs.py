@@ -14,8 +14,8 @@ async def get_costs(_args: dict[str, Any], ctx: ToolContext) -> ToolResult:
     if ctx.usage is None:
         return ToolResult("Spending isn't being recorded right now.", is_error=True)
     return ToolResult(summary_text(ctx.usage) + "\nSay it briefly, e.g. 'About forty cents "
-                      "today, most of it from the camera.' For billed amounts, the owner can "
-                      "run `python -m cadbot.admin spend`.")
+                      "today, most of it from the camera.' The billed amount is on the "
+                      "Usage page of the Claude Console.")
 
 
 TOOL = Tool(

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 cadbot contributors
-"""Spend tracking: the local usage log, the agent recording it, and the account query."""
+"""Spend tracking: the local usage log, the agent recording it, and the spend command."""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ from typing import Any
 
 import pytest
 
-from cadbot.account import billed_cost, find_key, hint_matches
 from cadbot.bus import Observation
 from cadbot.config import PricingConfig
 from cadbot.usage import Tokens, UsageLog, summary_text, tokens_from_usage
@@ -100,65 +99,16 @@ async def test_get_costs_tool(harness: AgentHarness, tmp_path: Path) -> None:
     ul.close()
 
 
-def test_key_hint_matching() -> None:
-    key = "sk-ant-api03-ABCDEFGH" + "x" * 80 + "igAA"
-    assert hint_matches("sk-ant-api03-ABC...igAA", key)
-    assert hint_matches("sk-ant-api03-ABC…igAA", key)
-    assert not hint_matches("sk-ant-api03-XYZ...igAA", key)
-    assert not hint_matches(None, key)
-
-
-class FakeAdmin:
-    """Mimics client.beta.organization.{api_keys,analytics.cost}.list."""
-
-    def __init__(self, rows: list[SimpleNamespace], keys: list[SimpleNamespace]) -> None:
-        self.calls: list[dict[str, Any]] = []
-
-        def cost_list(**kw: Any) -> list[SimpleNamespace]:
-            self.calls.append(kw)
-            return rows
-
-        org = SimpleNamespace(
-            api_keys=SimpleNamespace(list=lambda **kw: keys),
-            analytics=SimpleNamespace(cost=SimpleNamespace(list=cost_list)))
-        self.beta = SimpleNamespace(organization=org)
-
-
-def row(key_id: str, model: str, cents: str) -> SimpleNamespace:
-    return SimpleNamespace(group=SimpleNamespace(api_key_id=key_id, model=model),
-                           cost=SimpleNamespace(amount=cents))
-
-
-def test_billed_cost_for_cadbots_key() -> None:
-    admin: Any = FakeAdmin(
-        [row("apikey_cad", "claude-opus-5-5", "250.5"), row("apikey_cad", "claude-opus-5", "10"),
-         row("apikey_other", "claude-opus-5-5", "1000")],
-        [SimpleNamespace(id="apikey_cad", name="cadbot-pc",
-                         partial_key_hint="sk-ant-api03-AB...yz")])
-    assert find_key(admin, "sk-ant-api03-ABCDEF" + "q" * 40 + "xyz") == ("apikey_cad",
-                                                                           "cadbot-pc")
-    since = datetime.now(UTC) - timedelta(days=3)
-    cost = billed_cost(admin, since, key_id="apikey_cad")
-    assert cost.cadbot_usd == pytest.approx(2.605)
-    assert cost.organization_usd == pytest.approx(12.605)
-    assert cost.by_model == {"claude-opus-5-5": pytest.approx(2.505),
-                             "claude-opus-5": pytest.approx(0.10)}
-    assert admin.calls[0]["group_by"] == ["api_key_id", "model"]
-    with pytest.raises(ValueError):
-        billed_cost(admin, since - timedelta(days=40), key_id="apikey_cad")
-
-
-def test_admin_spend_without_an_admin_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+def test_admin_spend_shows_the_local_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
                                           capsys: pytest.CaptureFixture[str]) -> None:
     from cadbot.admin.__main__ import main as admin
     from cadbot.platform import get_platform
 
     monkeypatch.setenv("CADBOT_DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("ANTHROPIC_ADMIN_KEY", raising=False)
     get_platform.cache_clear()
     try:
         assert admin(["spend"]) == 0
     finally:
         get_platform.cache_clear()
     out = capsys.readouterr().out
-    assert "cadbot's own log" in out and "ANTHROPIC_ADMIN_KEY" in out
+    assert "cadbot's own log" in out and "Claude Console" in out

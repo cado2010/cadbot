@@ -121,12 +121,6 @@ class PricingConfig(_Section):
     web_search_per_1k: float = 10.00
 
 
-class AccountConfig(_Section):
-    api_key_id: str | None = None
-    """The Console id of cadbot's API key (apikey_...), for `cadbot.admin spend`. Found
-    automatically from the key's hint when left empty."""
-
-
 class HouseholdConfig(_Section):
     wishes: str = ""
     """Free text for the system prompt: greeting habits, quiet hours, preferences."""
@@ -142,7 +136,6 @@ class Config(_Section):
     net: NetConfig = Field(default_factory=NetConfig)
     household: HouseholdConfig = Field(default_factory=HouseholdConfig)
     pricing: PricingConfig = Field(default_factory=PricingConfig)
-    account: AccountConfig = Field(default_factory=AccountConfig)
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

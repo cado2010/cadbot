@@ -4,7 +4,7 @@
 
 Each request's token usage is stored with what triggered it (someone speaking, a camera
 frame, or something else) and an estimated cost from the configured prices. It's real-time
-but an estimate; `python -m cadbot.admin spend` can also ask Anthropic for the billed amount.
+but an estimate; the billed amount is on the Claude Console's Usage and Cost pages.
 No personal data: only counts, times and the kind of event.
 """
 

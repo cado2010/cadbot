@@ -85,12 +85,10 @@ cost, split into talking and camera frames:
 
 ```powershell
 uv run python -m cadbot.admin spend          # today, last 7 days, this month
-uv run python -m cadbot.admin spend --days 7 # account figures for the last 7 days
 ```
 
-With an Admin API key in `.env` (`ANTHROPIC_ADMIN_KEY`, see `.env.example`) the same command
-also shows what Anthropic actually billed for cadbot's API key (a few hours behind). You can
-also ask cadbot: "How much have you cost today?"
+You can also ask cadbot: "How much have you cost today?" For the amount actually billed, see
+the Usage and Cost pages in the Claude Console.
 
 **Troubleshooting**
 

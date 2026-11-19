@@ -50,7 +50,7 @@ uv run python -m cadbot.models ensure     # download and verify models
 uv run python -m cadbot.selftest --offline   # also --hardware, --api
 uv run python -m cadbot                   # run (add -v to log transcripts)
 uv run python -m cadbot.admin people      # whom cadbot remembers; `forget --name X` erases
-uv run python -m cadbot.admin spend       # API spend: local log + billed (needs admin key)
+uv run python -m cadbot.admin spend       # estimated API spend from cadbot's own log
 ```
 
 ## Milestones

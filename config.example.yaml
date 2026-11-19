@@ -79,9 +79,6 @@ pricing:
   cache_read_per_mtok: 0.20
   web_search_per_1k: 10.00
 
-account:
-  api_key_id: null          # cadbot's key id (apikey_...) for `cadbot.admin spend`; auto-found if null
-
 household:
   # Free text added to the system prompt, e.g. greeting habits and quiet hours.
   wishes: ""
