@@ -20,7 +20,7 @@ from cadbot.face.expressions import DEFAULT_PRESETS, EXPRESSIONS, LOOKS, Express
 from cadbot.face.fb_pygame import PygameFrameBuffer
 from cadbot.face.mouth import draw_mouth
 from cadbot.platform.base import Display, InputEvent
-from cadbot.vendor.roboeyes import OFF, ON, RoboEyes
+from cadbot.vendor.roboeyes import DEFAULT, OFF, ON, RoboEyes
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +61,7 @@ class Face:
         self.state = FaceState()
         self._font: pygame.font.Font | None = None
         self._mouth_pos: tuple[float, float] | None = None
+        self._gaze: tuple[float, float] | None = None
         self._running = False
         self._version = 0
         self.fb = PygameFrameBuffer(display.surface.subsurface(EYE_AREA), BACKGROUND, ACCENT,
@@ -80,6 +81,7 @@ class Face:
         if look is not None and look not in LOOKS:
             raise ValueError(f"unknown look {look!r}")
         self._version += 1
+        self._gaze = None  # the next gaze update re-aims the eyes
         spec = EXPRESSIONS[expression]
         intensity = max(0.0, min(1.0, intensity))
         self.state.expression, self.state.intensity, self.state.look = expression, intensity, look
@@ -98,6 +100,26 @@ class Face:
         expression = self.state.presets.get(moment)
         if expression:
             self.set(expression)
+
+    def set_gaze_point(self, point: tuple[float, float] | None) -> None:
+        """Point the eyes at a person (x, y in -1..1), or let go with None.
+
+        Following only applies to expressions that look straight ahead and when Claude
+        hasn't chosen a direction with set_face(look=...); a small dead zone stops jitter.
+        """
+        spec = EXPRESSIONS[self.state.expression]
+        if point is None or self.state.look is not None or spec.position != DEFAULT:
+            if self._gaze is not None:
+                self._gaze = None
+                self._apply(spec, self.state.intensity, self.state.look)
+            return
+        last = self._gaze
+        if last is not None and abs(point[0] - last[0]) < 0.08 \
+                and abs(point[1] - last[1]) < 0.08:
+            return
+        self._gaze = point
+        self.eyes.set_idle_mode(OFF)
+        self.eyes.look_at(point[0], point[1] * 0.6)
 
     def schedule_preset(self, moment: str, delay_s: float) -> None:
         """Apply a preset later, unless the expression changes before then."""

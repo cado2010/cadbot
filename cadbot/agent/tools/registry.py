@@ -15,7 +15,10 @@ if TYPE_CHECKING:
     from cadbot.actuators.speech import SpeechOutput, SpeechResult
     from cadbot.config import AgentConfig
     from cadbot.face.renderer import Face
+    from cadbot.people.registry import PeopleRegistry
     from cadbot.platform.base import Capabilities
+    from cadbot.sensors.listener import Listener
+    from cadbot.vision.loop import VisionLoop
 
 HELP_CATEGORIES = (
     "Talking and questions", "Search and translate", "Reminders and timers",
@@ -49,6 +52,16 @@ class TurnState:
 
 
 @dataclass
+class ConversationState:
+    """Shared across turns: lets tools tell one utterance from the next (for confirmations)."""
+
+    utterance_seq: int = 0
+    last_utterance: str = ""
+    confirmations: dict[str, tuple[str, int, float]] = field(default_factory=dict)
+    """token -> (person_id, utterance_seq when issued, monotonic time issued)."""
+
+
+@dataclass
 class ToolContext:
     speech: SpeechOutput
     face: Face
@@ -56,6 +69,10 @@ class ToolContext:
     config: AgentConfig
     registry: ToolRegistry
     turn: TurnState = field(default_factory=TurnState)
+    vision: VisionLoop | None = None
+    people: PeopleRegistry | None = None
+    listener: Listener | None = None
+    conversation: ConversationState = field(default_factory=ConversationState)
 
 
 @dataclass(frozen=True)

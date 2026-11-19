@@ -109,7 +109,7 @@ async def test_half_duplex_ignores_the_mic_while_speaking() -> None:
     for f in frames(20, SPEECH) + frames(30, SILENCE):
         listener.process(f)
     await asyncio.sleep(0.05)
-    assert starts == [] and bus.queue.empty()
+    assert starts == [] and bus.empty()
 
 
 async def test_barge_in_with_echo_cancellation() -> None:

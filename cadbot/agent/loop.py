@@ -28,7 +28,7 @@ from cadbot.agent.errors import (
 )
 from cadbot.agent.executor import ToolExecutor
 from cadbot.agent.session import Session
-from cadbot.agent.tools.registry import ToolContext, ToolRegistry, TurnState
+from cadbot.agent.tools.registry import ConversationState, ToolContext, ToolRegistry, TurnState
 from cadbot.bus import Event, EventBus, Utterance
 from cadbot.config import AgentConfig
 from cadbot.face.renderer import Face
@@ -38,7 +38,34 @@ from cadbot.router import render_event
 log = logging.getLogger(__name__)
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
+COMPACTION_BETA = "compact-2026-01-12"
 MAX_RETRY_DELAY_S = 10.0
+
+
+def request_params(cfg: AgentConfig, system_prompt: str, tools: list[dict[str, Any]],
+                   messages: list[dict[str, Any]]) -> dict[str, Any]:
+    """Every request cadbot sends to Claude (also used by `selftest --api`)."""
+    params: dict[str, Any] = {
+        "model": cfg.model,
+        "max_tokens": cfg.max_tokens,
+        "system": [{"type": "text", "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"}}],
+        "tools": tools,
+        "messages": messages,
+        "output_config": {"effort": cfg.effort},
+        "cache_control": {"type": "ephemeral"},
+        # Server-side compaction keeps image-heavy sessions bounded and the history
+        # append-only (safe with Opus 5.5's preserved thinking).
+        "context_management": {"edits": [{
+            "type": "compact_20260112",
+            "trigger": {"type": "input_tokens", "value": cfg.compact_at_tokens}}]},
+    }
+    betas = [COMPACTION_BETA]
+    if cfg.fallbacks == "default":
+        betas.append(FALLBACK_BETA)
+        params["fallbacks"] = "default"
+    params["betas"] = betas
+    return params
 
 
 class Agent:
@@ -64,6 +91,7 @@ class Agent:
         self._current: tuple[asyncio.Task[None], TurnState] | None = None
         self._interrupt_source: str | None = None
         self._offline_key = "offline"
+        self.conversation = ConversationState()
         self.idle_after_s = 2.5
 
     # ------------------------------------------------------------------ event intake
@@ -73,10 +101,14 @@ class Agent:
             await self.handle(await bus.get())
 
     async def handle(self, event: Event) -> None:
-        if isinstance(event, Utterance) and not self.health.online:
-            self._missed.append(event)
-            await self.canned.play(self._offline_key)
-            return
+        if not self.health.online:
+            if isinstance(event, Utterance):
+                self._missed.append(event)
+                await self.canned.play(self._offline_key)
+            return  # camera frames are dropped while offline
+        if isinstance(event, Utterance):
+            self.conversation.utterance_seq += 1
+            self.conversation.last_utterance = event.text
         content = render_event(event, self._take_notes())
         self.session.add_user(content)
         turn = TurnState()
@@ -131,29 +163,19 @@ class Agent:
     # ------------------------------------------------------------------ one turn
 
     def build_params(self) -> dict[str, Any]:
-        params: dict[str, Any] = {
-            "model": self.cfg.model,
-            "max_tokens": self.cfg.max_tokens,
-            "system": [{"type": "text", "text": self.system_prompt,
-                        "cache_control": {"type": "ephemeral"}}],
-            "tools": self.registry.api_definitions(),
-            "messages": self.session.window(),
-            "output_config": {"effort": self.cfg.effort},
-            "cache_control": {"type": "ephemeral"},
-        }
-        if self.cfg.fallbacks == "default":
-            params["betas"] = [FALLBACK_BETA]
-            params["fallbacks"] = "default"
-        return params
+        return request_params(self.cfg, self.system_prompt, self.registry.api_definitions(),
+                              self.session.window())
 
     async def _run_turn(self, turn: TurnState, event_content: list[dict[str, Any]],
                         event: Event) -> None:
         ctx = self.make_context(turn)
+        ctx.conversation = self.conversation
         self.face.set_busy(True)
         self.face.apply_preset("waiting")
         try:
             for _ in range(self.cfg.max_tool_rounds):
-                outcome = await self._round(ctx, event_content)
+                outcome = await self._round(ctx, event_content,
+                                            asked=isinstance(event, Utterance))
                 if outcome is None:
                     return
                 message, executor = outcome
@@ -185,8 +207,11 @@ class Agent:
                 self.face.schedule_preset("idle", self.idle_after_s)
 
     async def _round(self, ctx: ToolContext, event_content: list[dict[str, Any]],
-                     ) -> tuple[Any, ToolExecutor] | None:
-        """One request to Claude, with the design's retries. Tools run as they stream in."""
+                     asked: bool = True) -> tuple[Any, ToolExecutor] | None:
+        """One request to Claude, with the design's retries. Tools run as they stream in.
+
+        `asked`: someone spoke. Only then does cadbot say "One moment." while retrying.
+        """
         started = time.monotonic()
         attempt, said_one_moment, restarted = 0, False, False
         while True:
@@ -205,7 +230,7 @@ class Agent:
                             max(self.cfg.retry_delays_s[attempt], failure.retry_after_s or 0))
                 attempt += 1
                 waited = time.monotonic() - started + delay
-                if not said_one_moment and waited > self.cfg.one_moment_after_s:
+                if asked and not said_one_moment and waited > self.cfg.one_moment_after_s:
                     said_one_moment = True
                     await self.canned.play("one_moment", rate_limited=False)
                 await self.sleep(delay)
@@ -242,7 +267,9 @@ class Agent:
             self.health.mark_offline()
             key = "claude_unreachable" if network_ok else "offline"
             self._offline_key = key
-        else:
+        if not isinstance(event, Utterance):
+            return  # nobody asked anything (a camera frame): log and alert, don't speak
+        if kind not in (ErrorKind.OFFLINE, ErrorKind.TIMEOUT):
             self.face.set("sad" if kind in NEEDS_OWNER else "confused", 0.6)
         await self.canned.play(key)
 

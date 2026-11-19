@@ -219,7 +219,7 @@ class Platform:
     paths: Paths
     system: SystemInfo
     lifecycle: Lifecycle
-    _camera: Callable[[], Camera]
+    _camera: Callable[[int], Camera]
     _audio_in: Callable[[str | None], AudioIn]
     _audio_out: Callable[[str | None], AudioOut]
     _display: Callable[[], Display]
@@ -227,8 +227,8 @@ class Platform:
     _privacy: Callable[[], PrivacySwitch]
     _wifi: Callable[[], WifiScanner]
 
-    def camera(self) -> Camera:
-        return self._camera()
+    def camera(self, index: int = 0) -> Camera:
+        return self._camera(index)
 
     def audio_in(self, device: str | None = None) -> AudioIn:
         return self._audio_in(device)

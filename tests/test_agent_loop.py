@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from cadbot.agent.errors import ClaudeFailure, ErrorKind
-from cadbot.agent.loop import FALLBACK_BETA
+from cadbot.agent.loop import COMPACTION_BETA, FALLBACK_BETA
 from cadbot.bus import BackOnline
 from cadbot.config import AgentConfig
 from tests.fakes.claude import Slow, reply, text, tool_use
@@ -130,9 +130,15 @@ async def test_request_params(harness: AgentHarness) -> None:
     assert params["output_config"] == {"effort": "low"}
     assert params["system"][0]["cache_control"] == {"type": "ephemeral"}
     assert params["cache_control"] == {"type": "ephemeral"}
-    assert params["betas"] == [FALLBACK_BETA] and params["fallbacks"] == "default"
+    assert params["betas"] == [COMPACTION_BETA, FALLBACK_BETA]
+    assert params["fallbacks"] == "default"
+    edit = params["context_management"]["edits"][0]
+    assert edit["type"] == "compact_20260112" and edit["trigger"]["value"] >= 50_000
     names = [t["name"] for t in params["tools"]]
-    assert names == ["set_face", "speak", "set_face_presets", "get_help", "web_search"]
+    assert names[:4] == ["set_face", "speak", "set_face_presets", "get_help"]
+    assert {"set_watch_interval", "set_listening", "set_gaze", "remember_person",
+            "confirm_remember", "update_person", "find_person", "forget_person"} <= set(names)
+    assert names[-1] == "web_search"
     assert params["tools"][-1]["type"] == "web_search_20260209"
     assert "thinking" not in params and "temperature" not in params
 
@@ -141,7 +147,8 @@ async def test_fallbacks_can_be_turned_off() -> None:
     h = make_harness(config=AgentConfig(fallbacks="off"))
     h.client.script = [reply()]
     await h.agent.handle(utterance("hi"))
-    assert "fallbacks" not in h.client.requests[0] and "betas" not in h.client.requests[0]
+    assert "fallbacks" not in h.client.requests[0]
+    assert h.client.requests[0]["betas"] == [COMPACTION_BETA]
 
 
 async def test_system_prompt_is_identical_across_requests(harness: AgentHarness) -> None:

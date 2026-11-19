@@ -3,14 +3,25 @@
 """Typed events and the queue that carries them to the agent.
 
 Every input becomes an event; the router turns each one into a message for Claude.
-Later milestones add observation, timer, email and calendar events here.
 """
 
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from collections import deque
+from dataclasses import dataclass
 from datetime import datetime
+
+
+@dataclass(frozen=True)
+class Snapshot:
+    """What the camera shows right now: a 640x360 JPEG plus the face readings."""
+
+    jpeg: bytes
+    taken_at: datetime
+    is_night: bool
+    readings: str
+    """e.g. 'track 3: Priya (0.82, confident, frontal) · track 4: unknown (profile)'."""
 
 
 @dataclass(frozen=True)
@@ -23,6 +34,15 @@ class Utterance:
     language: str = "en"
     during_speech: bool = False
     """True if the person spoke while cadbot was talking (needs echo cancellation)."""
+    snapshot: Snapshot | None = None
+
+
+@dataclass(frozen=True)
+class Observation:
+    """A camera frame worth looking at: the scene changed, a face appeared, or a heartbeat."""
+
+    snapshot: Snapshot
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -33,15 +53,36 @@ class BackOnline:
     missed: tuple[Utterance, ...] = ()
 
 
-Event = Utterance | BackOnline
+Event = Utterance | Observation | BackOnline
 
 
-@dataclass
 class EventBus:
-    queue: asyncio.Queue[Event] = field(default_factory=asyncio.Queue)
+    """FIFO of events. A newer observation replaces one still waiting, so a busy agent
+    never works through a backlog of stale frames."""
+
+    def __init__(self) -> None:
+        self._events: deque[Event] = deque()
+        self._ready = asyncio.Event()
 
     async def put(self, event: Event) -> None:
-        await self.queue.put(event)
+        self.put_nowait(event)
+
+    def put_nowait(self, event: Event) -> None:
+        if isinstance(event, Observation):
+            for queued in list(self._events):
+                if isinstance(queued, Observation):
+                    self._events.remove(queued)
+        self._events.append(event)
+        self._ready.set()
 
     async def get(self) -> Event:
-        return await self.queue.get()
+        while not self._events:
+            self._ready.clear()
+            await self._ready.wait()
+        return self._events.popleft()
+
+    def empty(self) -> bool:
+        return not self._events
+
+    def __len__(self) -> int:
+        return len(self._events)

@@ -41,6 +41,27 @@ async def check_models(platform: Platform) -> str:
     return f"{len(statuses)} files verified in {platform.paths.models_dir}"
 
 
+async def check_database(platform: Platform) -> str:
+    from cadbot.people.store import PeopleStore
+
+    data = platform.paths.data_dir
+    store = PeopleStore(data / "cadbot.db", data / "faces")
+    try:
+        if not store.integrity_ok():
+            raise RuntimeError("SQLite integrity check failed")
+        return f"{len(store.load_all())} people remembered in {data / 'cadbot.db'}"
+    finally:
+        store.close()
+
+
+async def check_face_models(platform: Platform) -> str:
+    from cadbot.vision.faces import YuNetSFace
+
+    analyzer = YuNetSFace(platform.paths.models_dir)
+    faces = analyzer.analyze(np.zeros((360, 640, 3), dtype=np.uint8))
+    return f"YuNet + SFace loaded; blank image -> {len(faces)} faces"
+
+
 async def check_vad(_platform: Platform) -> str:
     from cadbot.sensors.vad import FRAME, SileroVad
 
@@ -80,7 +101,8 @@ async def check_api_key_present(platform: Platform) -> str:
 
 
 async def check_camera(platform: Platform) -> str:
-    camera = platform.camera()
+    camera = platform.camera(load_config(platform.name, platform.paths.config_dir)
+                             .vision.camera_index)
     camera.open()
     try:
         frames = [f for _ in range(15) if (f := camera.read()) is not None]
@@ -109,6 +131,31 @@ def _show_frame(platform: Platform, image: np.ndarray) -> None:
             time.sleep(0.05)
     finally:
         display.close()
+
+
+async def check_face_detection(platform: Platform) -> str:
+    """Look for a face for a few seconds. Nothing is saved."""
+    from cadbot.vision.faces import YuNetSFace
+
+    config = load_config(platform.name, platform.paths.config_dir)
+    analyzer = YuNetSFace(platform.paths.models_dir, min_face_px=config.vision.min_face_px)
+    camera = platform.camera(config.vision.camera_index)
+    print("    look at the camera for a few seconds...", flush=True)
+    camera.open()
+    best: list = []
+    try:
+        end = time.monotonic() + 5
+        while time.monotonic() < end and not best:
+            frame = camera.read()
+            if frame is not None:
+                best = await asyncio.to_thread(analyzer.analyze, frame.image)
+    finally:
+        camera.close()
+    if not best:
+        raise RuntimeError("no face found in 5 seconds (lighting? distance?)")
+    face = best[0]
+    return (f"{len(best)} face(s); first is {face.box[2]}x{face.box[3]} px, {face.angle}, "
+            f"detection score {face.score:.2f}, 128-number embedding ok")
 
 
 async def check_audio(platform: Platform) -> str:
@@ -183,29 +230,31 @@ async def check_api(platform: Platform) -> str:
 
 
 async def check_agent_request(platform: Platform) -> str:
-    """One request with cadbot's real agent settings: system prompt, tools, web search,
-    effort, fallbacks and caching. Expects Claude to answer through the speak tool."""
+    """One request exactly as cadbot sends it (system prompt, all tools, web search,
+    compaction, fallbacks, caching) with a camera-style image of a test pattern.
+    Expects Claude to answer through the speak tool."""
+    from datetime import datetime
+
     from cadbot.agent.client import AnthropicClient
-    from cadbot.agent.loop import FALLBACK_BETA
+    from cadbot.agent.loop import request_params
     from cadbot.agent.prompt import build_system_prompt
     from cadbot.agent.tools import build_registry
+    from cadbot.bus import Snapshot, Utterance
+    from cadbot.platform.fake.camera import test_pattern
+    from cadbot.router import render_event
+    from cadbot.vision.image import to_jpeg
 
     config = load_config(platform.name, platform.paths.config_dir)
     key = platform.paths.get_secret("ANTHROPIC_API_KEY")
     if not key:
         raise RuntimeError("ANTHROPIC_API_KEY not found (environment or .env)")
-    params = {
-        "model": config.agent.model, "max_tokens": config.agent.max_tokens,
-        "system": [{"type": "text", "cache_control": {"type": "ephemeral"},
-                    "text": build_system_prompt(platform.capabilities, platform.name)}],
-        "tools": build_registry(config.agent).api_definitions(),
-        "output_config": {"effort": config.agent.effort},
-        "cache_control": {"type": "ephemeral"},
-        "messages": [{"role": "user", "content": [{"type": "text", "text":
-                      '[utterance] Heard (1.0 s): "cadbot, can you hear me? Just say yes."'}]}],
-    }
-    if config.agent.fallbacks == "default":
-        params |= {"betas": [FALLBACK_BETA], "fallbacks": "default"}
+    snapshot = Snapshot(to_jpeg(test_pattern()), datetime.now(), False, "No faces in view.")
+    event = Utterance("cadbot, can you hear me? Just say yes.", datetime.now(), 1.0,
+                      snapshot=snapshot)
+    params = request_params(
+        config.agent, build_system_prompt(platform.capabilities, platform.name),
+        build_registry(config.agent).api_definitions(),
+        [{"role": "user", "content": render_event(event)}])
     client = AnthropicClient(key, 60)
     t0 = time.perf_counter()
     try:
@@ -216,14 +265,19 @@ async def check_agent_request(platform: Platform) -> str:
     calls = [f"{b.name}({b.input})" for b in message.content if b.type == "tool_use"]
     if not any(c.startswith("speak(") for c in calls):
         raise RuntimeError(f"expected a speak() call; got {calls or message.stop_reason}")
-    return f"{time.perf_counter() - t0:.1f}s, tool calls: {'; '.join(calls)}"
+    cached = getattr(message.usage, "cache_creation_input_tokens", 0) or 0
+    return (f"{time.perf_counter() - t0:.1f}s, {message.usage.input_tokens + cached} input "
+            f"tokens, tool calls: {'; '.join(calls)}")
 
 
 SUITES: dict[str, list[tuple[str, Check]]] = {
-    "offline": [("config", check_config), ("models", check_models), ("vad", check_vad),
+    "offline": [("config", check_config), ("models", check_models),
+                ("database", check_database), ("face models", check_face_models),
+                ("vad", check_vad),
                 ("piper -> whisper", check_speech_round_trip),
                 ("api key", check_api_key_present)],
-    "hardware": [("camera", check_camera), ("mic + speaker", check_audio),
+    "hardware": [("camera", check_camera), ("face detection", check_face_detection),
+                 ("mic + speaker", check_audio),
                  ("face window", check_face)],
     "api": [("claude", check_api), ("agent request", check_agent_request)],
 }

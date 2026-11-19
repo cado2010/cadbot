@@ -28,8 +28,8 @@ class Block:
         return {k: v for k, v in self.__dict__.items() if v is not None}
 
 
-def tool_use(name: str, **args: Any) -> Block:
-    return Block("tool_use", id=f"toolu_{next(_ids):04d}", name=name, input=args)
+def tool_use(tool_name: str, /, **args: Any) -> Block:
+    return Block("tool_use", id=f"toolu_{next(_ids):04d}", name=tool_name, input=args)
 
 
 def text(value: str) -> Block:

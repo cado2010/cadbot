@@ -76,5 +76,5 @@ class FakeCamera:
         self._opened = False
 
 
-def make_camera() -> FakeCamera:
+def make_camera(_index: int = 0) -> FakeCamera:
     return FakeCamera()

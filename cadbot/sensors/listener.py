@@ -17,7 +17,7 @@ from typing import Protocol
 
 import numpy as np
 
-from cadbot.bus import EventBus, Utterance
+from cadbot.bus import EventBus, Snapshot, Utterance
 from cadbot.platform.base import AudioIn
 from cadbot.sensors.stt import SpeechToText
 from cadbot.sensors.vad import SpeechDiscarded, SpeechEnd, SpeechSegmenter, SpeechStart
@@ -46,8 +46,10 @@ class Listener:
                  segmenter: SpeechSegmenter, stt: SpeechToText, bus: EventBus,
                  speech_state: SpeakingState, echo_cancellation: bool,
                  half_duplex_tail_s: float = 0.3, barge_in_min_s: float = 0.4,
-                 hooks: ListenerHooks | None = None) -> None:
+                 hooks: ListenerHooks | None = None,
+                 snapshot: Callable[[], Snapshot | None] = lambda: None) -> None:
         self.audio_in = audio_in
+        self.snapshot = snapshot
         self.vad = vad
         self.segmenter = segmenter
         self.stt = stt
@@ -121,4 +123,4 @@ class Listener:
         log.debug("heard: %s", transcript.text)
         await self.bus.put(Utterance(
             text=transcript.text, started_at=started_at, duration_s=event.audio.size / 16_000,
-            language=transcript.language, during_speech=during))
+            language=transcript.language, during_speech=during, snapshot=self.snapshot()))

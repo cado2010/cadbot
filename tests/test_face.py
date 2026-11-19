@@ -123,3 +123,17 @@ def test_vendored_roboeyes_fix_keeps_eyes_on_screen(display: PygameDisplay) -> N
     face.eyes.look_at(1.0, -1.0)
     assert face.eyes.eyeLxNext == face.eyes.get_screen_constraint_X()
     assert face.eyes.eyeLyNext == 0
+
+
+def test_eyes_follow_a_point_only_when_looking_ahead(display: PygameDisplay) -> None:
+    face = Face(display)
+    face.set("neutral")
+    face.set_gaze_point((1.0, 0.0))
+    assert face.eyes.eyeLxNext == face.eyes.get_screen_constraint_X()
+    assert not face.eyes.idle
+    face.set("thinking")  # looks up-left on purpose: following doesn't override it
+    face.set_gaze_point((1.0, 0.0))
+    assert face.eyes.eyeLxNext == 0
+    face.set("neutral")
+    face.set_gaze_point(None)
+    assert face.eyes.idle  # idle glancing comes back when nobody is in view

@@ -51,8 +51,8 @@ def build_help(ctx: ToolContext, topic: str | None = None) -> str:
              "offer to go deeper; never read the whole list):"]
     for category in ordered:
         lines.append(f"- {category}: " + "; ".join(i.summary for i in entries[category]))
-    lines.append("Not available yet: seeing people, remembering names, reminders, calendar, "
-                 "email, photos. They arrive in later versions.")
+    lines.append("Not available yet: reminders, calendar, email, photos, saved conversations, "
+                 "incognito and group mode. They arrive in later versions.")
     return "\n".join(lines)
 
 
@@ -82,6 +82,7 @@ WEB_SEARCH_HELP = HelpInfo(
 
 
 def all_local_tools() -> list[Tool]:
-    from cadbot.agent.tools import face, speak
+    from cadbot.agent.tools import face, people, speak, vision
 
-    return [face.SET_FACE, speak.TOOL, face.SET_FACE_PRESETS, TOOL]
+    return [face.SET_FACE, speak.TOOL, face.SET_FACE_PRESETS, TOOL,
+            vision.SET_WATCH_INTERVAL, vision.SET_LISTENING, vision.SET_GAZE, *people.ALL]

@@ -34,10 +34,14 @@ from cadbot.face.renderer import Face
 from cadbot.models import voice_files, whisper_dir
 from cadbot.models.download import check
 from cadbot.net.health import HealthMonitor, https_probe
+from cadbot.people.registry import PeopleRegistry
+from cadbot.people.store import PeopleStore
 from cadbot.platform import Platform, get_platform
 from cadbot.sensors.listener import Listener, ListenerHooks
 from cadbot.sensors.stt import WhisperTranscriber
 from cadbot.sensors.vad import SegmenterConfig, SileroVad, SpeechSegmenter
+from cadbot.vision.faces import SFACE, YUNET, YuNetSFace
+from cadbot.vision.loop import FrameReader, VisionLoop
 
 log = logging.getLogger("cadbot")
 
@@ -112,7 +116,7 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
         face.apply_preset("idle")
         missed = agent.take_missed()
         if missed:
-            bus.queue.put_nowait(BackOnline(since=since, missed=missed))
+            bus.put_nowait(BackOnline(since=since, missed=missed))
 
     health = HealthMonitor(https_probe(config.net.health_url),
                            interval_s=config.net.health_interval_s,
@@ -121,9 +125,16 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
     system_prompt = build_system_prompt(platform.capabilities, platform.name,
                                         config.household.wishes)
 
+    people = open_people(platform, config)
+    vision = make_vision(platform, config, people, bus)
+    if vision is not None:
+        vision.on_gaze = face.set_gaze_point
+    listener: Listener | None = None
+
     def make_context(turn: TurnState) -> ToolContext:
         return ToolContext(speech=speech, face=face, capabilities=platform.capabilities,
-                           config=config.agent, registry=registry, turn=turn)
+                           config=config.agent, registry=registry, turn=turn, vision=vision,
+                           people=people if vision is not None else None, listener=listener)
 
     client = AnthropicClient(api_key, config.agent.request_timeout_s)
     agent = Agent(client=client, registry=registry, config=config.agent,
@@ -151,13 +162,16 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
             on_speech_start=on_speech_start,
             on_speech_discarded=lambda: None if agent.busy else face.schedule_preset("idle", 0.5),
             on_barge_in=lambda: agent.interrupt("their voice"),
-        ))
+        ),
+        snapshot=vision.snapshot if vision is not None else lambda: None)
 
     runtime.spawn(face.run(), "face")
     runtime.spawn(canned.render_all(), "canned")
     runtime.spawn(listener.run(), "listener")
     runtime.spawn(agent.run(bus), "agent")
     runtime.spawn(health.run(), "health")
+    if vision is not None:
+        runtime.spawn(_run_vision(vision), "vision")
     runtime.spawn(_watchdog(platform), "watchdog")
     platform.lifecycle.notify_ready()
     log.info("cadbot %s is listening (platform %s). Esc stops speech; close the window to quit.",
@@ -173,7 +187,42 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
             await client.close()
         await audio_out.close()
         display.close()
+        people.store.close()
     return 0
+
+
+def open_people(platform: Platform, config: Config) -> PeopleRegistry:
+    data = platform.paths.data_dir
+    registry = PeopleRegistry(PeopleStore(data / "cadbot.db", data / "faces"), config.vision)
+    registry.load()
+    return registry
+
+
+def make_vision(platform: Platform, config: Config, people: PeopleRegistry,
+                bus: EventBus) -> VisionLoop | None:
+    if not config.vision.enabled or not platform.capabilities.camera:
+        log.info("camera disabled")
+        return None
+    models = platform.paths.models_dir
+    analyzer = None
+    if (models / YUNET).is_file() and (models / SFACE).is_file():
+        analyzer = YuNetSFace(models, min_face_px=config.vision.min_face_px)
+    else:
+        log.warning("face models missing; run `python -m cadbot.models ensure`. "
+                    "The camera works, but nobody will be recognised.")
+    reader = FrameReader(platform.camera(config.vision.camera_index))
+    return VisionLoop(reader=reader, analyzer=analyzer, people=people, config=config.vision,
+                      emit=bus.put_nowait)
+
+
+async def _run_vision(vision: VisionLoop) -> None:
+    """A camera failure shouldn't take cadbot down: it keeps listening and talking."""
+    try:
+        await vision.run()
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        log.exception("camera stopped; carrying on without it")
 
 
 async def _watchdog(platform: Platform) -> None:
