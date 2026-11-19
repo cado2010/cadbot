@@ -88,6 +88,8 @@ class Agent:
         self.notifier = notifier
         self.session = session or Session()
         self.usage_log = usage_log
+        self.place: Callable[[], str | None] = lambda: None
+        """Where the device is (city, region), added to every event."""
         self.sleep = sleep
         self._notes: list[str] = []
         self._missed: list[Utterance] = []
@@ -112,7 +114,7 @@ class Agent:
         if isinstance(event, Utterance):
             self.conversation.utterance_seq += 1
             self.conversation.last_utterance = event.text
-        content = render_event(event, self._take_notes())
+        content = render_event(event, self._take_notes(), place=self.place())
         self.session.add_user(content)
         turn = TurnState()
         task = asyncio.create_task(self._run_turn(turn, content, event))

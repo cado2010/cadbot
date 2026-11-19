@@ -7,11 +7,12 @@ The fake platform never reads .env, so tests can't pick up a real API key by acc
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from pathlib import Path
 
-from cadbot.platform.base import Capabilities, Platform, not_implemented
+from cadbot.platform.base import Capabilities, Platform, WifiAP, not_implemented
 from cadbot.platform.common.paths import DirPaths
 
 
@@ -40,6 +41,20 @@ class FakeLifecycle:
         self.events.append("stopping")
 
 
+class FakeWifiScanner:
+    """Networks from a JSON fixture (CADBOT_FAKE_WIFI: [[bssid, dbm, ssid], ...]), or none."""
+
+    def __init__(self, aps: list[WifiAP] | None = None) -> None:
+        if aps is None:
+            path = os.environ.get("CADBOT_FAKE_WIFI")
+            rows = json.loads(Path(path).read_text()) if path else []
+            aps = [WifiAP(str(b), int(d), str(s)) for b, d, s in rows]
+        self.aps = aps
+
+    def scan(self) -> list[WifiAP]:
+        return list(self.aps)
+
+
 def make_paths() -> DirPaths:
     root = Path(os.environ.get("CADBOT_DATA_DIR") or tempfile.mkdtemp(prefix="cadbot-fake-"))
     return DirPaths(data_dir=root, config_dir=root / "config", cache_dir=root / "cache",
@@ -59,7 +74,7 @@ def build() -> Platform:
 
     return Platform(
         name="fake",
-        capabilities=Capabilities(keyboard=True, camera=True),
+        capabilities=Capabilities(keyboard=True, camera=True, wifi_scan=True),
         paths=make_paths(),
         system=FakeSystemInfo(),
         lifecycle=FakeLifecycle(),
@@ -69,5 +84,5 @@ def build() -> Platform:
         _display=make_display,
         _presence=_stub("PresenceSensor"),
         _privacy=_stub("PrivacySwitch"),
-        _wifi=_stub("WifiScanner"),
+        _wifi=FakeWifiScanner,
     )

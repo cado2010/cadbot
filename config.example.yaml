@@ -71,6 +71,23 @@ net:
   failures_before_offline: 2
   canned_min_interval_s: 60
 
+# Where cadbot is. Set latitude, longitude and city yourself and nothing is sent anywhere;
+# otherwise nearby Wi-Fi networks (BSSIDs and signal strength) go to beaconDB, falling back to
+# its IP-address estimate, and the coordinates go to OpenStreetMap's Nominatim for the address.
+location:
+  enabled: true
+  latitude: null
+  longitude: null
+  address: null
+  city: null
+  region: null
+  country_code: null        # two letters, e.g. US
+  wifi_lookup: true
+  ip_fallback: true
+  refresh_hours: 24
+  moved_km: 1.0             # moves larger than this are reported to Claude
+  contact: ""               # optional contact for the OpenStreetMap User-Agent
+
 # Prices for cadbot's own cost estimates (USD). claude-opus-5-5 list prices as of Nov 2026;
 # check https://www.anthropic.com/pricing and update if they change.
 pricing:

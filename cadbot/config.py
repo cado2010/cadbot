@@ -112,6 +112,31 @@ class NetConfig(_Section):
     canned_min_interval_s: float = 60.0
 
 
+class LocationConfig(_Section):
+    """Where cadbot is. A hand-entered position wins and needs no lookups; otherwise a
+    Wi-Fi scan located by beaconDB, falling back to beaconDB's IP-address estimate."""
+
+    enabled: bool = True
+    latitude: float | None = None
+    longitude: float | None = None
+    address: str | None = None
+    city: str | None = None
+    region: str | None = None
+    country_code: str | None = None
+    """Two-letter code, e.g. US. With latitude, longitude and city set, nothing is sent
+    anywhere to find the location."""
+    wifi_lookup: bool = True
+    """Send nearby Wi-Fi networks' BSSIDs and signal strengths to beaconDB."""
+    ip_fallback: bool = True
+    geolocate_url: str = "https://api.beacondb.net/v1/geolocate"
+    reverse_geocode_url: str = "https://nominatim.openstreetmap.org/reverse"
+    refresh_hours: float = 24.0
+    moved_km: float = 1.0
+    contact: str = ""
+    """Optional contact (e.g. a project URL) added to the User-Agent, as OpenStreetMap's
+    Nominatim policy asks. Leave empty to send none."""
+
+
 class PricingConfig(_Section):
     """Prices for cost estimates, in USD. Defaults are claude-opus-5-5's list prices as of
     Nov 2026; check https://www.anthropic.com/pricing and update if they change."""
@@ -139,6 +164,7 @@ class Config(_Section):
     net: NetConfig = Field(default_factory=NetConfig)
     household: HouseholdConfig = Field(default_factory=HouseholdConfig)
     pricing: PricingConfig = Field(default_factory=PricingConfig)
+    location: LocationConfig = Field(default_factory=LocationConfig)
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

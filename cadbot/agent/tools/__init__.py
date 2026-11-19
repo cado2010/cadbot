@@ -12,12 +12,16 @@ from cadbot.agent.tools.registry import ServerTool, ToolRegistry
 from cadbot.config import AgentConfig
 
 
-def build_registry(config: AgentConfig) -> ToolRegistry:
+def build_registry(config: AgentConfig,
+                   user_location: dict[str, str] | None = None) -> ToolRegistry:
+    """`user_location` (approximate city/region/country/timezone) makes web searches local.
+    Tools stay fixed for the session, so it's taken once, at startup."""
     registry = ToolRegistry()
     for tool in all_local_tools():
         registry.register(tool)
-    registry.register_server(ServerTool(
-        {"type": "web_search_20260209", "name": "web_search",
-         "max_uses": config.web_search_max_uses},
-        WEB_SEARCH_HELP))
+    search: dict[str, object] = {"type": "web_search_20260209", "name": "web_search",
+                                 "max_uses": config.web_search_max_uses}
+    if user_location:
+        search["user_location"] = user_location
+    registry.register_server(ServerTool(search, WEB_SEARCH_HELP))
     return registry

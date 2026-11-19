@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from cadbot.actuators.speech import SpeechOutput, SpeechResult
     from cadbot.config import AgentConfig
     from cadbot.face.renderer import Face
+    from cadbot.location import LocationService
     from cadbot.people.registry import PeopleRegistry
     from cadbot.platform.base import Capabilities
     from cadbot.sensors.listener import Listener
@@ -75,6 +76,7 @@ class ToolContext:
     listener: Listener | None = None
     conversation: ConversationState = field(default_factory=ConversationState)
     usage: UsageLog | None = None
+    location: LocationService | None = None
 
 
 @dataclass(frozen=True)

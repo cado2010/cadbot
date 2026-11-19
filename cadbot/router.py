@@ -7,11 +7,25 @@ from __future__ import annotations
 import base64
 from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from cadbot.bus import BackOnline, Event, Observation, Snapshot, Utterance
+from cadbot.bus import BackOnline, Event, LocationChanged, Observation, Snapshot, Utterance
+
+_tz: ZoneInfo | None = None
+
+
+def set_timezone(name: str | None) -> None:
+    """Show times in the device's local timezone (from its location)."""
+    global _tz
+    try:
+        _tz = ZoneInfo(name) if name else None
+    except (ZoneInfoNotFoundError, ValueError):
+        _tz = None
 
 
 def spoken_time(moment: datetime) -> str:
+    if _tz is not None:
+        moment = (moment if moment.tzinfo else moment.astimezone()).astimezone(_tz)
     hour = moment.strftime("%I").lstrip("0")
     return f"{moment.strftime('%a %d %b %Y')}, {hour}:{moment.strftime('%M %p').lower()}"
 
@@ -33,7 +47,8 @@ def _camera_line(snapshot: Snapshot) -> str:
     return f"Camera ({spoken_time(snapshot.taken_at)}):{night} Faces: {snapshot.readings}"
 
 
-def render_event(event: Event, notes: list[str] | None = None) -> list[dict[str, Any]]:
+def render_event(event: Event, notes: list[str] | None = None,
+                 place: str | None = None) -> list[dict[str, Any]]:
     lines = list(notes or [])
     snapshot: Snapshot | None = None
     if isinstance(event, Utterance):
@@ -50,8 +65,14 @@ def render_event(event: Event, notes: list[str] | None = None) -> list[dict[str,
             lines.append("While it was down the device played its offline message and heard:")
             lines.extend(f"- {_utterance_line(u)}" for u in event.missed)
             lines.append("Decide whether any of it still needs an answer.")
+    elif isinstance(event, LocationChanged):
+        lines.append(f"[location_changed at {spoken_time(datetime.now())}] The device seems to "
+                     f"have moved from {event.previous} to {event.current} (about "
+                     f"{event.distance_km:.0f} km). Mention it only if it matters.")
     else:  # pragma: no cover - every event type must be handled above
         raise TypeError(f"no renderer for {type(event).__name__}")
+    if place:
+        lines.append(f"Location: {place}.")
     content: list[dict[str, Any]] = []
     if snapshot is not None:
         if snapshot.jpeg is not None:

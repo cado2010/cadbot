@@ -54,7 +54,16 @@ class BackOnline:
     missed: tuple[Utterance, ...] = ()
 
 
-Event = Utterance | Observation | BackOnline
+@dataclass(frozen=True)
+class LocationChanged:
+    """The device's position moved by more than about a kilometre."""
+
+    previous: str
+    current: str
+    distance_km: float
+
+
+Event = Utterance | Observation | BackOnline | LocationChanged
 
 
 class EventBus:

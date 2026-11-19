@@ -6,6 +6,7 @@
     python -m cadbot.admin forget --name Raj        (asks for confirmation)
     python -m cadbot.admin forget --id p_1a2b3c4d --yes
     python -m cadbot.admin spend                    (what cadbot has cost)
+    python -m cadbot.admin location [--refresh]     (where cadbot thinks it is)
 
 Stop cadbot first, or restart it afterwards, so it reloads the people it knows.
 """
@@ -87,6 +88,43 @@ def cmd_spend() -> int:
     return 0
 
 
+def cmd_location(refresh: bool) -> int:
+    """Show the cached location; --refresh looks it up again now."""
+    import asyncio
+
+    import truststore
+
+    from cadbot.location import LocationService, LocationStore
+
+    platform = get_platform()
+    config = load_config(platform.name, platform.paths.config_dir)
+    wifi = platform.wifi_scanner() if platform.capabilities.wifi_scan else None
+    store = LocationStore(platform.paths.data_dir / "cadbot.db")
+    service = LocationService(config.location, store, wifi)
+    try:
+        if refresh:
+            truststore.inject_into_ssl()
+            print("Looking up the location (Wi-Fi networks to beaconDB, address from "
+                  "OpenStreetMap)...")
+            asyncio.run(service.refresh())
+        loc = service.current
+        if loc is None:
+            print("Location unknown. Run with --refresh, or set location in config.yaml.")
+            return 1
+        print(f"Place:     {loc.label}" + (f", {loc.country}" if loc.country else ""))
+        print(f"Address:   {loc.address or 'unknown'}")
+        accuracy = f"about {loc.accuracy_m:.0f} m" if loc.accuracy_m else "unknown"
+        print(f"Position:  {loc.lat:.5f}, {loc.lon:.5f} (accuracy {accuracy})")
+        print(f"Timezone:  {loc.timezone or 'unknown'}")
+        print(f"Source:    {loc.source}, updated {loc.updated_at}")
+        if loc.source == "ip":
+            print("Only a rough, city-level estimate from the internet connection. For better "
+                  "accuracy set location.latitude/longitude/city in config.yaml.")
+        return 0
+    finally:
+        store.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m cadbot.admin")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -97,10 +135,14 @@ def main(argv: list[str] | None = None) -> int:
     target.add_argument("--id")
     forget.add_argument("--yes", action="store_true", help="don't ask for confirmation")
     sub.add_parser("spend", help="what cadbot has cost (estimated from its own log)")
+    location = sub.add_parser("location", help="where cadbot thinks it is")
+    location.add_argument("--refresh", action="store_true", help="look the location up again")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
     if args.command == "spend":
         return cmd_spend()
+    if args.command == "location":
+        return cmd_location(args.refresh)
     store = open_store()
     try:
         if args.command == "people":

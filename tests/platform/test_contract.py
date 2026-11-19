@@ -25,6 +25,7 @@ from cadbot.platform.base import (
     Lifecycle,
     Paths,
     SystemInfo,
+    WifiAP,
 )
 
 PLATFORM = get_platform()
@@ -122,6 +123,13 @@ def test_lifecycle_calls_are_safe() -> None:
     PLATFORM.lifecycle.notify_ready()
     PLATFORM.lifecycle.watchdog_ping()
     PLATFORM.lifecycle.notify_stopping()
+
+
+def test_wifi_scan_returns_access_points() -> None:
+    if not PLATFORM.capabilities.wifi_scan:
+        pytest.skip("no Wi-Fi scanning on this platform")
+    aps = PLATFORM.wifi_scanner().scan()
+    assert all(isinstance(ap, WifiAP) and -110 <= ap.rssi_dbm <= 0 for ap in aps)
 
 
 @pytest.mark.parametrize("factory", ["presence_sensor", "privacy_switch", "wifi_scanner"])

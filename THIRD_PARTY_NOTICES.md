@@ -45,4 +45,11 @@ its own licence. Model and voice files are downloaded at install time by
 
 Exact URLs and SHA-256 hashes are in `cadbot/models/manifest.py`.
 
+## Online services used
+
+| Service | Used for | Terms |
+| --- | --- | --- |
+| beaconDB (api.beacondb.net) | Position from nearby Wi-Fi networks, or an IP estimate | Public-domain database; experimental. IP data by DB-IP |
+| OpenStreetMap Nominatim | Address from coordinates | Nominatim usage policy (max 1 request/s, identifying User-Agent); data © OpenStreetMap contributors, ODbL |
+
 This is a practical summary, not legal advice. When adding a dependency, add it here.

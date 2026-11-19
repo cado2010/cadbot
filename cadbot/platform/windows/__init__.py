@@ -17,7 +17,7 @@ def build() -> Platform:
         name="windows",
         capabilities=Capabilities(
             night_vision=False, presence_sensor=False, privacy_switch=False,
-            echo_cancellation=False, touch=False, keyboard=True, camera=True, wifi_scan=False,
+            echo_cancellation=False, touch=False, keyboard=True, camera=True, wifi_scan=True,
         ),
         paths=make_paths(),
         system=WindowsSystemInfo(),

@@ -34,6 +34,13 @@ Please read this before running cadbot, and tell people near the device what it 
   `uv run python -m cadbot.admin forget --name <name>`. People who say no, or give no name,
   are recognised only for that visit and nothing is written. Face recognition is a
   convenience, not proof of identity.
+- **Location:** to know where "here" is (weather, "near me", local time), cadbot sends the
+  IDs and signal strengths of nearby Wi-Fi networks to beaconDB (or, failing that, lets it
+  estimate from your internet address), and the resulting coordinates to OpenStreetMap's
+  Nominatim for the address. Both happen at startup and about once a day. Set the location
+  by hand in `config.yaml` (latitude, longitude and city) and nothing is sent. Claude is told
+  never to say the street address to people it doesn't know. Check it with
+  `uv run python -m cadbot.admin location --refresh`.
 - **Logs** are written to the data folder and include what was heard only with `--verbose`.
 - **Your API key** stays in your local `.env` file, which Git ignores.
 

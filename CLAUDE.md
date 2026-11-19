@@ -37,7 +37,8 @@ section is settled. Read the relevant section before changing behaviour.
 - `cadbot/vision/`: camera task (`loop.py`), frame gate, YuNet/SFace (`faces.py`), tracker
 - `cadbot/people/`: consent-gated SQLite store (`store.py`), in-memory registry and matcher
 - `cadbot/models/`: pinned model downloads · `cadbot/selftest/`: per-machine checks
-- `cadbot/admin/`: owner commands (`python -m cadbot.admin people | forget`)
+- `cadbot/admin/`: owner commands (`python -m cadbot.admin people | forget | spend | location`)
+- `cadbot/location.py`: position (config, beaconDB Wi-Fi/IP), address (Nominatim), timezone
 
 ## Commands
 
@@ -51,6 +52,7 @@ uv run python -m cadbot.selftest --offline   # also --hardware, --api
 uv run python -m cadbot                   # run (add -v to log transcripts)
 uv run python -m cadbot.admin people      # whom cadbot remembers; `forget --name X` erases
 uv run python -m cadbot.admin spend       # estimated API spend from cadbot's own log
+uv run python -m cadbot.admin location --refresh   # where cadbot thinks it is
 ```
 
 ## Milestones

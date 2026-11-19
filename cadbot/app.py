@@ -28,15 +28,17 @@ from cadbot.agent.loop import Agent
 from cadbot.agent.prompt import build_system_prompt
 from cadbot.agent.tools import build_registry
 from cadbot.agent.tools.registry import ToolContext, TurnState
-from cadbot.bus import BackOnline, EventBus
+from cadbot.bus import BackOnline, EventBus, LocationChanged
 from cadbot.config import Config, load_config
 from cadbot.face.renderer import Face
+from cadbot.location import Location, LocationService, LocationStore, distance_km
 from cadbot.models import voice_files, whisper_dir
 from cadbot.models.download import check
 from cadbot.net.health import HealthMonitor, https_probe
 from cadbot.people.registry import PeopleRegistry
 from cadbot.people.store import PeopleStore
 from cadbot.platform import Platform, get_platform
+from cadbot.router import set_timezone
 from cadbot.sensors.listener import Listener, ListenerHooks
 from cadbot.sensors.stt import WhisperTranscriber
 from cadbot.sensors.vad import SegmenterConfig, SileroVad, SpeechSegmenter
@@ -103,8 +105,10 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
     speech = SpeechOutput(tts, audio_out)
     face = Face(display, level=speech.level, fps=config.face.fps)
     canned = CannedClips(tts, speech, config.net.canned_min_interval_s)
-    registry = build_registry(config.agent)
     bus = EventBus()
+    location = await start_location(platform, config, bus)
+    current = location.current if location is not None else None
+    registry = build_registry(config.agent, current.user_location() if current else None)
     runtime = Runtime(asyncio.Event(), [])
     agent: Agent
 
@@ -139,7 +143,7 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
         return ToolContext(speech=speech, face=face, capabilities=platform.capabilities,
                            config=config.agent, registry=registry, turn=turn, vision=vision,
                            people=people if vision is not None else None, listener=listener,
-                           usage=usage)
+                           usage=usage, location=location)
 
     client = AnthropicClient(api_key, config.agent.request_timeout_s)
     agent = Agent(client=client, registry=registry, config=config.agent,
@@ -147,6 +151,8 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
                   speech=speech, canned=canned, health=health, notifier=LogNotifier(),
                   usage_log=usage)
     agent.idle_after_s = config.face.idle_after_speech_s
+    if location is not None:
+        agent.place = location.label
     face.callbacks.on_stop = lambda: agent.interrupt("the stop button or the Esc key")
     face.callbacks.on_quit = runtime.stop.set
 
@@ -176,6 +182,8 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
     runtime.spawn(listener.run(), "listener")
     runtime.spawn(agent.run(bus), "agent")
     runtime.spawn(health.run(), "health")
+    if location is not None:
+        runtime.spawn(location.run(), "location")
     if vision is not None:
         runtime.spawn(_run_vision(vision), "vision")
     runtime.spawn(_watchdog(platform), "watchdog")
@@ -195,7 +203,42 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
         display.close()
         people.store.close()
         usage.close()
+        if location is not None:
+            location.store.close()
     return 0
+
+
+async def start_location(platform: Platform, config: Config,
+                         bus: EventBus) -> LocationService | None:
+    """Load the cached location, refreshing it first if it's stale (up to ~20 s)."""
+    if not config.location.enabled:
+        return None
+    wifi = None
+    if platform.capabilities.wifi_scan:
+        try:
+            wifi = platform.wifi_scanner()
+        except NotImplementedError:
+            wifi = None
+
+    def on_moved(previous: Location | None, current: Location) -> None:
+        set_timezone(current.timezone)
+        if previous is not None:
+            bus.put_nowait(LocationChanged(previous.label, current.label, distance_km(
+                (previous.lat, previous.lon), (current.lat, current.lon))))
+
+    service = LocationService(config.location, LocationStore(platform.paths.data_dir
+                                                             / "cadbot.db"), wifi,
+                              on_moved=on_moved)
+    if service.is_stale():
+        try:
+            await asyncio.wait_for(service.refresh(), timeout=20)
+        except TimeoutError:
+            log.warning("location lookup is slow; carrying on without it for now")
+    if service.current is None:
+        log.info("location unknown (set location in config.yaml to fix it)")
+    else:
+        set_timezone(service.current.timezone)
+    return service
 
 
 def camera_mode(config: Config) -> str:
