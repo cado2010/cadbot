@@ -53,7 +53,8 @@ def test_mouth_moves_with_audio_level(display: PygameDisplay) -> None:
     level[0] = 1.0
     face.eyes.fpsTimer = -10_000
     face.tick()
-    mouth = pygame.Rect(480, 560, 320, 160)  # the mouth strip, scaled to 1280x720
+    mouth = pygame.Rect(0, 0, 320, 120)
+    mouth.center = face._mouth_centre(face.eyes)
 
     def pixels(surface: pygame.Surface) -> bytes:
         return pygame.image.tobytes(surface.subsurface(mouth).copy(), "RGB")
