@@ -233,3 +233,24 @@ def test_router_without_an_image() -> None:
     content = render_event(Utterance("hello", datetime.now(), 1.0, snapshot=snap))
     assert [b["type"] for b in content] == ["text"]
     assert "Faces: 1 face in view" in content[0]["text"]
+
+
+# ----------------------------------------------------------------------- camera preview
+
+
+async def test_preview_is_small_mirrored_and_marks_faces(people: PeopleRegistry) -> None:
+    loop, reader, analyzer, _, _ = make_loop(people)
+    assert loop.preview() is None  # no frame yet
+    image = frame().image.copy()
+    image[:, :640] = (0, 0, 255)  # left half red (BGR), right half grey
+    from cadbot.platform.base import Frame
+
+    analyzer.faces = [face(1, x=100, y=200, size=160)]  # on the camera's left
+    reader.push(Frame(image, 0.0))
+    await loop.step()
+    preview = loop.preview()
+    assert preview is not None and preview.rgb.shape == (144, 256, 3)
+    assert tuple(preview.rgb[72, 250]) == (255, 0, 0)  # red now on the right: mirrored
+    (box,) = preview.boxes
+    assert box.status == "unknown" and box.x == pytest.approx(1 - 260 / 1280)  # mirrored
+    assert loop.preview().rgb is preview.rgb  # same frame: no re-processing

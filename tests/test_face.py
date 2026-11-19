@@ -167,3 +167,36 @@ def test_pupils_are_drawn_inside_the_eyes(display: PygameDisplay) -> None:
         face.tick()
     pixels = pygame.image.tobytes(display.surface, "RGB")
     assert bytes(IRIS) in pixels and bytes(PUPIL) in pixels
+
+
+def test_camera_preview_in_the_lower_left(display: PygameDisplay) -> None:
+    import numpy as np
+
+    from cadbot.face.renderer import BOX_COLOURS, PREVIEW_RECT
+    from cadbot.vision.loop import Preview, PreviewBox
+
+    face = Face(display)
+    rgb = np.zeros((144, 256, 3), dtype=np.uint8)
+    rgb[:, :, 2] = 200  # blue picture
+    face.preview = lambda: Preview(rgb, (PreviewBox(0.5, 0.25, 0.25, 0.5, "known"),), False)
+    face.eyes.fpsTimer = -10_000
+    face.tick()
+    assert display.surface.get_at(PREVIEW_RECT.move(10, 10).topleft)[:3] == (0, 0, 200)
+    edge = (PREVIEW_RECT.x + 128, PREVIEW_RECT.y + 36 + 20)
+    assert display.surface.get_at(edge)[:3] == BOX_COLOURS["known"]
+
+    face.preview = None  # switched off in config: nothing drawn there
+    face.eyes.fpsTimer = -10_000
+    face.tick()
+    assert display.surface.get_at(PREVIEW_RECT.move(10, 10).topleft)[:3] != (0, 0, 200)
+
+
+def test_preview_failure_never_breaks_the_face(display: PygameDisplay) -> None:
+    face = Face(display)
+
+    def broken() -> None:
+        raise RuntimeError("camera unplugged")
+
+    face.preview = broken  # type: ignore[assignment]
+    face.eyes.fpsTimer = -10_000
+    face.tick()  # no exception

@@ -70,7 +70,12 @@ uv run python -m cadbot
 
 Talk to it; it answers through the headphones. Press **Esc** or click **Stop** in the face
 window to cut it off; close the window to quit. See whom it remembers with
-`uv run python -m cadbot.admin people`. Optional settings (microphone name, Whisper on
+`uv run python -m cadbot.admin people`.
+
+The lower-left corner shows a small mirrored view of what the camera sees, so you can get
+yourself in frame: a green box means cadbot recognises you, amber that it isn't sure, white
+that it doesn't know you. It's shown on screen only and never saved; set
+`face.camera_preview: false` in `config.yaml` to hide it. Optional settings (microphone name, Whisper on
 the GPU, household wishes) go in `config.yaml`: copy `config.example.yaml` to start.
 
 **Keeping costs down.** Every camera frame sent to Claude costs about 300 image tokens. In

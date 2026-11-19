@@ -131,6 +131,8 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
     vision = make_vision(platform, config, people, bus)
     if vision is not None:
         vision.on_gaze = face.set_gaze_point
+        if config.face.camera_preview:
+            face.preview = vision.preview
     listener: Listener | None = None
 
     def make_context(turn: TurnState) -> ToolContext:

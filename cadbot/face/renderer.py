@@ -18,6 +18,7 @@ import random
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import pygame
 
@@ -26,6 +27,9 @@ from cadbot.face.fb_pygame import PygameFrameBuffer
 from cadbot.face.mouth import draw_mouth
 from cadbot.platform.base import Display, InputEvent
 from cadbot.vendor.roboeyes import DEFAULT, NE, NW, OFF, ON, SE, SW, E, N, RoboEyes, S, W
+
+if TYPE_CHECKING:
+    from cadbot.vision.loop import Preview
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +42,8 @@ MOUTH_CENTRE = (EYE_AREA.centerx,
                 EYE_AREA.y + round((EYE_LOGICAL[1] / 2 + BASE_EYE["height"] / 2 + MOUTH_GAP)
                                    * SCALE))
 STOP_BUTTON = pygame.Rect(1090, 600, 160, 80)
+PREVIEW_RECT = pygame.Rect(24, 552, 256, 144)  # lower-left corner
+BOX_COLOURS = {"known": (90, 210, 120), "unsure": (240, 180, 60), "unknown": (235, 235, 235)}
 
 BACKGROUND = (8, 10, 18)
 SCLERA = (236, 240, 246)
@@ -84,6 +90,9 @@ class Face:
         self._glance = (0.0, 0.0)
         self._next_glance = 0.0
         self._confused_until = 0.0
+        self.preview: Callable[[], Preview | None] | None = None
+        """Camera preview source (lower-left corner); None hides it."""
+        self._preview_surface: tuple[int, pygame.Surface] | None = None
         self._running = False
         self._version = 0
         self.fb = PygameFrameBuffer(display.surface.subsurface(EYE_AREA), BACKGROUND, SCLERA,
@@ -221,6 +230,8 @@ class Face:
         _clear_outside(screen, EYE_AREA)
         draw_mouth(screen, self._mouth_centre(eyes), mouth, open_amount=self.level(),
                    intensity=self.state.intensity, scale=SCALE, colour=MOUTH_COLOUR)
+        if self.preview is not None:
+            self._draw_preview(screen)
         if self.state.show_stop:
             self._draw_stop_button(screen)
         if self.state.status == "offline":
@@ -262,6 +273,34 @@ class Face:
             clip = white.to_surface(setcolor=(255, 255, 255, 255), unsetcolor=(0, 0, 0, 0))
             overlay.blit(clip, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
             eye.blit(overlay, (0, 0))
+
+    def _draw_preview(self, screen: pygame.Surface) -> None:
+        """What the camera sees, small and mirrored, so people can get themselves in frame.
+        Face boxes: green = recognised, amber = not sure, white = not known."""
+        assert self.preview is not None
+        try:
+            preview = self.preview()
+        except Exception:  # a camera hiccup must never break the face
+            log.debug("camera preview unavailable", exc_info=True)
+            preview = None
+        rect = PREVIEW_RECT
+        if preview is None:
+            pygame.draw.rect(screen, (40, 44, 56), rect, 2, border_radius=8)
+            return
+        key = id(preview.rgb)
+        if self._preview_surface is None or self._preview_surface[0] != key:
+            h, w = preview.rgb.shape[:2]
+            image = pygame.image.frombuffer(preview.rgb.tobytes(), (w, h), "RGB")
+            if (w, h) != rect.size:
+                image = pygame.transform.smoothscale(image, rect.size)
+            self._preview_surface = (key, image)
+        screen.blit(self._preview_surface[1], rect)
+        for box in preview.boxes:
+            face = pygame.Rect(rect.x + round(box.x * rect.w), rect.y + round(box.y * rect.h),
+                               max(4, round(box.w * rect.w)), max(4, round(box.h * rect.h)))
+            pygame.draw.rect(screen, BOX_COLOURS.get(box.status, BOX_COLOURS["unknown"]),
+                             face.clip(rect), 2, border_radius=4)
+        pygame.draw.rect(screen, (70, 76, 92), rect.inflate(4, 4), 2, border_radius=8)
 
     def _draw_stop_button(self, screen: pygame.Surface) -> None:
         pygame.draw.rect(screen, (200, 60, 60), STOP_BUTTON, border_radius=18)

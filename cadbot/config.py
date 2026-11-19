@@ -100,6 +100,9 @@ class VisionConfig(_Section):
 class FaceConfig(_Section):
     fps: int = 30
     idle_after_speech_s: float = 2.5
+    camera_preview: bool = True
+    """Show a small mirrored camera view in the lower-left corner, with face boxes, so
+    people can see whether they're in frame. Shown on screen only, never saved."""
 
 
 class NetConfig(_Section):

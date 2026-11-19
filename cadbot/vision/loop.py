@@ -11,8 +11,10 @@ import logging
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 
+import cv2
 import numpy as np
 
 from cadbot.bus import Observation, Snapshot
@@ -27,6 +29,27 @@ from cadbot.vision.tracker import Track, Tracker
 log = logging.getLogger(__name__)
 
 GazePoint = tuple[float, float] | None
+PREVIEW_SIZE = (256, 144)
+
+
+@dataclass(frozen=True)
+class PreviewBox:
+    """A face in the preview: position as fractions of the preview (already mirrored)."""
+
+    x: float
+    y: float
+    w: float
+    h: float
+    status: str  # "known", "unsure" or "unknown"
+
+
+@dataclass(frozen=True)
+class Preview:
+    """A small mirrored copy of the camera image for the screen; never stored."""
+
+    rgb: np.ndarray  # (h, w, 3) uint8, C-contiguous
+    boxes: tuple[PreviewBox, ...]
+    is_night: bool
 
 
 class FrameReader:
@@ -94,6 +117,7 @@ class VisionLoop:
         self._last_analysis = -1e9
         self._last_face_seen = -1e9
         self._snapshot_cache: tuple[int, Snapshot] | None = None
+        self._preview_cache: tuple[int, np.ndarray] | None = None
 
     # ------------------------------------------------------------------ main loop
 
@@ -174,6 +198,25 @@ class VisionLoop:
                         self.readings())
         self._snapshot_cache = (key, snap)
         return snap
+
+    def preview(self) -> Preview | None:
+        """The newest frame, small and mirrored like a selfie camera, with face boxes."""
+        frame = self._frame or self.reader.latest()
+        if frame is None:
+            return None
+        key = id(frame)
+        if self._preview_cache is None or self._preview_cache[0] != key:
+            small = cv2.resize(frame.image, PREVIEW_SIZE, interpolation=cv2.INTER_AREA)
+            rgb = np.ascontiguousarray(cv2.flip(small, 1)[..., ::-1])
+            self._preview_cache = (key, rgb)
+        h, w = frame.image.shape[:2]
+        boxes = []
+        for track in self.tracker.visible():
+            x, y, bw, bh = track.box
+            level = track.identity.level if track.identity is not None else "unknown"
+            status = {"confident": "known", "not sure": "unsure"}.get(level, "unknown")
+            boxes.append(PreviewBox(1 - (x + bw) / w, y / h, bw / w, bh / h, status))
+        return Preview(self._preview_cache[1], tuple(boxes), frame.is_night)
 
     def lighting(self) -> str:
         return "night" if self._frame is not None and self._frame.is_night else "day"

@@ -61,6 +61,7 @@ vision:
   track_timeout_s: 2
 
 face:
+  camera_preview: true      # small mirrored camera view, lower-left corner (screen only)
   fps: 30
   idle_after_speech_s: 2.5
 
