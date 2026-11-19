@@ -60,6 +60,7 @@ vision:
   pending_forget_after_s: 600   # unsaved people are dropped 10 minutes after leaving view
   track_timeout_s: 2
   gaze_hold_s: 3            # keep looking where a face was for this long after losing it
+  camera_stale_s: 5         # no new frames this long: reconnect the camera
 
 face:
   camera_preview: true      # small mirrored camera view, lower-left corner (screen only)

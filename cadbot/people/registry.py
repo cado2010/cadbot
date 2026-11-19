@@ -184,8 +184,11 @@ class PeopleRegistry:
             self.store.add_view(person.person_id, view, self.cfg.max_views_per_person)
         person.views.append(view)
         if len(person.views) > self.cfg.max_views_per_person:
-            same = [v for v in person.views if (v.angle, v.lighting) == (view.angle, lighting)]
-            person.views.remove((same if len(same) > 1 else person.views)[0])
+            # drop the oldest view of the same kind (else the oldest), by position: views
+            # hold numpy arrays, which can't be compared with ==
+            same = [i for i, v in enumerate(person.views)
+                    if (v.angle, v.lighting) == (view.angle, lighting)]
+            del person.views[same[0] if len(same) > 1 else 0]
         log.debug("new %s/%s view for %s%s", track.angle, lighting, person.person_id,
                   " (asked)" if force else "")
 

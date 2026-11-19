@@ -215,3 +215,17 @@ def test_admin_lists_and_forgets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     check = PeopleStore(tmp_path / "cadbot.db", tmp_path / "faces")
     assert [p.name for p in check.load_all()] == ["Rajesh"]
     check.close()
+
+
+def test_more_than_max_views_in_memory_does_not_crash(people: PeopleRegistry) -> None:
+    """Regression: dropping an old view compared numpy embeddings with == and crashed the
+    camera task once someone had collected more than 8 views."""
+    tracker = Tracker()
+    track = track_for(1, tracker)
+    person = people.remember_pending(track, name="Sam", description="", declined=False,
+                                     lighting="day", thumbnail_jpeg=None)
+    for i in range(12):
+        (track,), _ = tracker.update([face(1, angle="left" if i % 2 else "right",
+                                           noise=0.2, noise_seed=i)], i)
+        people.update(person.person_id, track=track, lighting="night" if i % 3 else "day")
+    assert len(person.views) == people.cfg.max_views_per_person

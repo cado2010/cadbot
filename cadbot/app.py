@@ -265,7 +265,7 @@ def make_vision(platform: Platform, config: Config, people: PeopleRegistry,
     else:
         log.warning("face models missing; run `python -m cadbot.models ensure`. "
                     "The camera works, but nobody will be recognised.")
-    reader = FrameReader(platform.camera(config.vision.camera_index))
+    reader = FrameReader(lambda: platform.camera(config.vision.camera_index))
     return VisionLoop(reader=reader, analyzer=analyzer, people=people, config=config.vision,
                       emit=bus.put_nowait)
 

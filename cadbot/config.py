@@ -96,6 +96,8 @@ class VisionConfig(_Section):
     """Unsaved (pending or declined) people are dropped this long after leaving view."""
     track_timeout_s: float = 2.0
     gaze_hold_s: float = 3.0
+    camera_stale_s: float = 5.0
+    """No new frame for this long: reconnect the camera (then retry at 5, 10, 20... s)."""
     """Keep looking where a face was for this long after losing it."""
 
 

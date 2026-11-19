@@ -30,6 +30,7 @@ log = logging.getLogger(__name__)
 
 GazePoint = tuple[float, float] | None
 PREVIEW_SIZE = (256, 144)
+PREVIEW_STALE_S = 2.0
 
 
 @dataclass(frozen=True)
@@ -53,44 +54,77 @@ class Preview:
 
 
 class FrameReader:
-    """Reads the camera on its own thread and keeps only the newest frame."""
+    """Reads the camera on its own thread and keeps only the newest frame.
 
-    def __init__(self, camera: Camera) -> None:
-        self.camera = camera
+    `restart()` opens a fresh camera when frames stop (unplugged, a driver stall, another
+    app taking the camera). A read stuck inside the driver can't be interrupted, so a stuck
+    thread is abandoned (it's a daemon) rather than releasing the camera under it.
+    """
+
+    def __init__(self, camera_factory: Callable[[], Camera]) -> None:
+        self.camera_factory = camera_factory
+        self.camera: Camera | None = None
         self._latest: Frame | None = None
+        self._last_frame_at = time.monotonic()
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        self.camera.open()
-        self._thread = threading.Thread(target=self._run, name="camera", daemon=True)
+        camera = self.camera_factory()
+        camera.open()
+        self.camera = camera
+        self._stop = threading.Event()
+        self._last_frame_at = time.monotonic()
+        self._thread = threading.Thread(target=self._run, args=(camera, self._stop),
+                                        name="camera", daemon=True)
         self._thread.start()
 
-    def _run(self) -> None:
-        failures = 0
-        while not self._stop.is_set():
-            frame = self.camera.read()
+    def _run(self, camera: Camera, stop: threading.Event) -> None:
+        while not stop.is_set():
+            frame = camera.read()
             if frame is None:
-                failures += 1
-                if failures in (10, 100):
-                    log.warning("camera returned no frame %d times in a row", failures)
                 time.sleep(0.05)
                 continue
-            failures = 0
             with self._lock:
+                if stop.is_set():
+                    return
                 self._latest = frame
+                self._last_frame_at = time.monotonic()
             time.sleep(0.01)
 
     def latest(self) -> Frame | None:
         with self._lock:
             return self._latest
 
-    def stop(self) -> None:
+    def age(self) -> float:
+        """Seconds since the last new frame (or since the camera was opened)."""
+        with self._lock:
+            return time.monotonic() - self._last_frame_at
+
+    def _shutdown(self) -> None:
         self._stop.set()
-        if self._thread is not None:
-            self._thread.join(timeout=2)
-        self.camera.close()
+        thread, camera = self._thread, self.camera
+        self._thread, self.camera = None, None
+        if thread is not None:
+            thread.join(timeout=2)
+            if thread.is_alive():
+                log.warning("camera read is stuck in the driver; abandoning that connection")
+                return
+        if camera is not None:
+            try:
+                camera.close()
+            except Exception as exc:  # a dead device can fail to close; we're replacing it
+                log.debug("camera close failed: %s", exc)
+
+    def restart(self) -> None:
+        self._shutdown()
+        with self._lock:
+            self._latest = None
+        self.start()
+
+    def stop(self) -> None:
+        self._shutdown()
 
 
 class VisionLoop:
@@ -118,17 +152,62 @@ class VisionLoop:
         self._last_face_seen = -1e9
         self._snapshot_cache: tuple[int, Snapshot] | None = None
         self._preview_cache: tuple[int, np.ndarray] | None = None
+        self._errors = 0
+        self._next_reconnect = 0.0
+        self._reconnect_delay = 5.0
 
     # ------------------------------------------------------------------ main loop
 
     async def run(self) -> None:
-        await asyncio.to_thread(self.reader.start)
+        """Keeps going whatever happens: a bad frame is skipped, a silent camera reopened."""
+        connected = await self._connect(self.reader.start, "open")
         try:
             while True:
-                busy = await self.step()
-                await asyncio.sleep(1 / self.cfg.analyze_hz if busy else 1.0)
+                busy = False
+                try:
+                    if not connected or self.reader.age() > self.cfg.camera_stale_s:
+                        connected = await self._reconnect()
+                    else:
+                        busy = await self.step()
+                except Exception:
+                    self._errors += 1
+                    if self._errors in (1, 10) or self._errors % 100 == 0:
+                        log.exception("camera frame processing failed (%d so far); "
+                                      "carrying on", self._errors)
+                await asyncio.sleep(1 / self.cfg.analyze_hz if busy else 0.5)
         finally:
             await asyncio.to_thread(self.reader.stop)
+
+    async def _connect(self, action: Callable[[], None], verb: str) -> bool:
+        try:
+            await asyncio.to_thread(action)
+        except Exception as exc:
+            log.warning("camera %s failed: %s", verb, exc)
+            return False
+        self._reconnect_delay = 5.0
+        log.info("camera %s", "connected" if verb == "open" else "reconnected")
+        return True
+
+    async def _reconnect(self) -> bool:
+        """Frames stopped: forget what was in view, then reopen with growing pauses."""
+        if self._frame is not None:
+            log.warning("no camera frames for %.0f s; reconnecting", self.reader.age())
+            self._lose_sight()
+        now = self.clock()
+        if now < self._next_reconnect:
+            return False
+        ok = await self._connect(self.reader.restart, "restart")
+        if not ok:
+            self._next_reconnect = now + self._reconnect_delay
+            self._reconnect_delay = min(60.0, self._reconnect_delay * 2)
+        return ok
+
+    def _lose_sight(self) -> None:
+        self._frame = None
+        self._prev_grey = None
+        self.tracker.tracks.clear()
+        self._last_face_seen = -1e9
+        self.on_gaze(None)
 
     async def step(self) -> bool:
         """Process the newest frame once. Returns True while something is happening."""
@@ -200,9 +279,10 @@ class VisionLoop:
         return snap
 
     def preview(self) -> Preview | None:
-        """The newest frame, small and mirrored like a selfie camera, with face boxes."""
+        """The newest frame, small and mirrored like a selfie camera, with face boxes.
+        None while the camera is silent, so the screen never shows a frozen picture."""
         frame = self._frame or self.reader.latest()
-        if frame is None:
+        if frame is None or self.reader.age() > PREVIEW_STALE_S:
             return None
         key = id(frame)
         if self._preview_cache is None or self._preview_cache[0] != key:

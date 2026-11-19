@@ -254,3 +254,94 @@ async def test_preview_is_small_mirrored_and_marks_faces(people: PeopleRegistry)
     (box,) = preview.boxes
     assert box.status == "unknown" and box.x == pytest.approx(1 - 260 / 1280)  # mirrored
     assert loop.preview().rgb is preview.rgb  # same frame: no re-processing
+
+
+# ----------------------------------------------------------------------- staying alive
+
+
+async def _run_briefly(loop: VisionLoop, seconds: float = 0.7) -> None:
+    import asyncio
+
+    task = asyncio.create_task(loop.run())
+    await asyncio.sleep(seconds)
+    assert not task.done(), task.exception() if task.done() else None
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+async def test_a_failing_frame_does_not_stop_the_camera(people: PeopleRegistry) -> None:
+    loop, reader, analyzer, _, _ = make_loop(people)
+
+    def broken(_image: np.ndarray) -> list:
+        raise ValueError("boom")
+
+    analyzer.analyze = broken  # type: ignore[method-assign]
+    reader.push(frame())
+    await _run_briefly(loop)
+    assert loop._errors >= 1
+
+
+async def test_silent_camera_is_reconnected_and_people_forgotten(
+        people: PeopleRegistry) -> None:
+    loop, reader, analyzer, _, gaze = make_loop(people)
+    analyzer.faces = [face(1)]
+    reader.push(frame())
+    await loop.step()
+    assert loop.tracker.visible() and gaze[-1] is not None
+    reader.frame_age = 30.0  # frames stopped arriving
+    assert loop.preview() is None  # no frozen picture on screen
+    await _run_briefly(loop, 0.3)
+    assert reader.restarts >= 1
+    assert loop.tracker.visible() == [] and gaze[-1] is None
+    assert loop.readings() == "No faces in view."
+
+
+async def test_reconnect_backs_off_when_the_camera_stays_away(people: PeopleRegistry) -> None:
+    loop, reader, _, _, _ = make_loop(people)
+    reader.fail_restarts = 99
+    reader.frame_age = 30.0
+    assert await loop._reconnect() is False
+    assert await loop._reconnect() is False  # too soon: not retried yet
+    assert reader.restarts == 1
+    loop.clock_ref[0] += 6  # type: ignore[attr-defined]
+    await loop._reconnect()
+    assert reader.restarts == 2 and loop._reconnect_delay == 20.0
+
+
+def test_real_frame_reader_reopens_a_fresh_camera() -> None:
+    import time as _time
+
+    from cadbot.platform.base import Frame
+    from cadbot.vision.loop import FrameReader
+
+    opened: list[object] = []
+
+    class OneShotCamera:
+        def __init__(self) -> None:
+            self.sent = False
+            opened.append(self)
+
+        def open(self) -> None: ...
+        def close(self) -> None: ...
+        def set_focus(self, value: int | None) -> None: ...
+        def set_exposure(self, value: int | None) -> None: ...
+
+        def read(self) -> Frame | None:
+            if self.sent:
+                return None  # goes silent after one frame
+            self.sent = True
+            return Frame(np.zeros((36, 64, 3), np.uint8), _time.time())
+
+    reader = FrameReader(OneShotCamera)
+    reader.start()
+    try:
+        _time.sleep(0.2)
+        assert reader.latest() is not None
+        _time.sleep(0.3)
+        assert reader.age() >= 0.25
+        reader.restart()
+        _time.sleep(0.2)
+        assert len(opened) == 2 and reader.age() < 0.25
+    finally:
+        reader.stop()

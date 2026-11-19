@@ -72,7 +72,7 @@ class Consent:
     at: str = field(default_factory=now_iso)
 
 
-@dataclass
+@dataclass(eq=False)  # compared by identity: numpy embeddings can't be compared with ==
 class View:
     """One saved face embedding, tagged with its angle and lighting."""
 

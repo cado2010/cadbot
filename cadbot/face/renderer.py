@@ -85,6 +85,7 @@ class Face:
         self.callbacks = callbacks or FaceCallbacks()
         self.state = FaceState()
         self._font: pygame.font.Font | None = None
+        self._small_font: pygame.font.Font | None = None
         self._gaze: tuple[float, float] | None = None
         self._pupil = (0.0, 0.0)
         self._glance = (0.0, 0.0)
@@ -290,8 +291,13 @@ class Face:
             log.debug("camera preview unavailable", exc_info=True)
             preview = None
         rect = PREVIEW_RECT
-        if preview is None:
+        if preview is None:  # no picture rather than a frozen one
             pygame.draw.rect(screen, (40, 44, 56), rect, 2, border_radius=8)
+            if self._small_font is None and pygame.font.get_init():
+                self._small_font = pygame.font.Font(None, 26)
+            if self._small_font is not None:
+                label = self._small_font.render("camera reconnecting...", True, (130, 136, 150))
+                screen.blit(label, label.get_rect(center=rect.center))
             return
         key = id(preview.rgb)
         if self._preview_surface is None or self._preview_surface[0] != key:

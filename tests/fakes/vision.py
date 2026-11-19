@@ -38,6 +38,9 @@ class FakeReader:
     def __init__(self) -> None:
         self.frame: Frame | None = None
         self.started = self.stopped = False
+        self.frame_age = 0.0
+        self.restarts = 0
+        self.fail_restarts = 0
 
     def push(self, f: Frame) -> None:
         self.frame = f
@@ -47,6 +50,16 @@ class FakeReader:
 
     def latest(self) -> Frame | None:
         return self.frame
+
+    def age(self) -> float:
+        return self.frame_age
+
+    def restart(self) -> None:
+        self.restarts += 1
+        if self.fail_restarts:
+            self.fail_restarts -= 1
+            raise RuntimeError("camera 0 could not be opened")
+        self.frame_age = 0.0
 
     def stop(self) -> None:
         self.stopped = True
