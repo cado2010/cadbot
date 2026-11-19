@@ -281,3 +281,6 @@ config.*.yaml
 *.webm
 # ...except licensed test media, each with a <file>.LICENSE note (checked by tests)
 !tests/media/**
+
+# Office lock files (created while a document is open)
+~$*
