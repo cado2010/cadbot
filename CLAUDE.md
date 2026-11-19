@@ -34,7 +34,10 @@ section is settled. Read the relevant section before changing behaviour.
 - `cadbot/prompts/system.md`: the system prompt; behaviour lives here, not in code
 - `cadbot/sensors/`: VAD, Whisper, listener · `cadbot/actuators/`: Piper speech, canned clips
 - `cadbot/face/`: RoboEyes adapter, expressions, mouth, renderer · `cadbot/vendor/roboeyes/`
+- `cadbot/vision/`: camera task (`loop.py`), frame gate, YuNet/SFace (`faces.py`), tracker
+- `cadbot/people/`: consent-gated SQLite store (`store.py`), in-memory registry and matcher
 - `cadbot/models/`: pinned model downloads · `cadbot/selftest/`: per-machine checks
+- `cadbot/admin/`: owner commands (`python -m cadbot.admin people | forget`)
 
 ## Commands
 
@@ -46,11 +49,18 @@ $env:CADBOT_PLATFORM="windows"; uv run pytest -m hardware   # contract tests on 
 uv run python -m cadbot.models ensure     # download and verify models
 uv run python -m cadbot.selftest --offline   # also --hardware, --api
 uv run python -m cadbot                   # run (add -v to log transcripts)
+uv run python -m cadbot.admin people      # whom cadbot remembers; `forget --name X` erases
 ```
 
 ## Milestones
 
-M1 (talks) is done: mic → Silero VAD → Whisper → Claude → Piper, the face window, interrupts,
-offline/error replies. Next is M2 (camera, frame gate, observation events). Don't build features
-of later milestones early; add them as new tools in `cadbot/agent/tools/` and new event types in
-`cadbot/bus.py`.
+M1 (talks), M2 (sees: camera, frame gate, observation events, eyes that follow) and M3
+(remembers names: YuNet + SFace, tracker, multi-angle views, remember/confirm/forget with the
+consent and confirmation gates) are done. Next is M4 (reminders: APScheduler + SQLite, timer
+events). Don't build later milestones early; add them as new tools in `cadbot/agent/tools/`
+and new event types in `cadbot/bus.py`.
+
+- Images make history grow fast: server-side compaction (beta `compact-2026-01-12`) keeps it
+  bounded. Don't trim or edit history by hand.
+- Nothing about a person may be written without consent: go through `PeopleRegistry` /
+  `PeopleStore`, which enforce it. Frames are never written to disk.

@@ -8,27 +8,36 @@ carries out the tool calls Claude asks for.
 The full design is in [docs/cadbot-design.md](docs/cadbot-design.md). It targets a Raspberry
 Pi 5 with a touchscreen, and runs on a Windows PC for development.
 
-**Status: milestone M1, "cadbot talks".** Microphone → voice activity detection (Silero) →
-speech-to-text (faster-whisper, on the device) → Claude → speech (Piper), with a face window
-showing the expressions Claude chooses. Seeing people, remembering names, reminders and Google
-accounts come in later milestones.
+**Status: milestones M1–M3.** cadbot talks (microphone → Silero VAD → faster-whisper on the
+device → Claude → Piper speech), sees (a camera frame goes to Claude when the scene changes,
+a new face appears, or at an interval Claude chooses), and remembers people who agree to it
+(local YuNet + SFace face matching, a tracker, and a consent-gated store). The face window
+shows the expressions Claude chooses, and the eyes follow the person in front of it.
+Reminders and Google accounts come in later milestones.
 
 ## Privacy notice
 
 Please read this before running cadbot, and tell people near the device what it does.
 
-- **What leaves the device:** the *text* of what the microphone hears is sent to the Claude API
-  (Anthropic) so Claude can decide whether and how to answer. There is no wake word, so this
-  includes speech that wasn't meant for cadbot. When Claude searches the web, the search runs on
+- **What leaves the device:** the *text* of what the microphone hears, and *camera frames*
+  (640×360 JPEGs) when the scene changes, a new face appears, someone speaks, or at the
+  interval Claude chooses. They go to the Claude API (Anthropic) so Claude can decide what to
+  do. There is no wake word, so this includes speech not meant for cadbot. Web searches run on
   Anthropic's side. Anthropic's API data-retention terms apply to what is sent.
-- **What stays on the device:** raw audio is processed in memory and never saved or uploaded.
-  Speech-to-text (Whisper) and text-to-speech (Piper) run locally. In M1 nothing is stored about
-  anyone; application logs are written to the data folder, and include what was heard only with
-  `--verbose`.
+- **What stays on the device:** raw audio and the continuous video are processed in memory and
+  never saved. Speech-to-text, text-to-speech and face matching run locally.
+- **Remembering people:** cadbot asks before it remembers anyone, and saves nothing about a
+  person until they clearly say yes; this is enforced in code. For people who agree it keeps,
+  on this device only: face embeddings (numbers, not photos), one small face thumbnail, their
+  name, a short appearance note, and how and when they agreed. They are kept until the person
+  says "forget me" (which erases everything after a spoken confirmation), or the owner runs
+  `uv run python -m cadbot.admin forget --name <name>`. People who say no, or give no name,
+  are recognised only for that visit and nothing is written. Face recognition is a
+  convenience, not proof of identity.
+- **Logs** are written to the data folder and include what was heard only with `--verbose`.
 - **Your API key** stays in your local `.env` file, which Git ignores.
 
-Later milestones send camera frames to Claude and can remember people who agree to it; the
-design document describes the consent and deletion rules, which are enforced in code.
+Tell people near the device that it sees and listens, for example with a small sign.
 
 ## Setup on Windows
 
@@ -60,7 +69,8 @@ uv run python -m cadbot
 ```
 
 Talk to it; it answers through the headphones. Press **Esc** or click **Stop** in the face
-window to cut it off; close the window to quit. Optional settings (microphone name, Whisper on
+window to cut it off; close the window to quit. See whom it remembers with
+`uv run python -m cadbot.admin people`. Optional settings (microphone name, Whisper on
 the GPU, household wishes) go in `config.yaml`: copy `config.example.yaml` to start.
 
 **Troubleshooting**

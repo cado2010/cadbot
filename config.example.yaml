@@ -37,6 +37,23 @@ agent:
   request_timeout_s: 60
   one_moment_after_s: 3
   retry_delays_s: [1, 4]
+  compact_at_tokens: 60000  # server-side compaction summarises older history past this
+
+vision:
+  enabled: true
+  camera_index: 0           # 0 = first webcam
+  analyze_hz: 4             # face detection rate while something is happening
+  gate_pixel_delta: 25      # frame gate: how much a pixel must change to count
+  gate_change_fraction: 0.03  # ...and what share of pixels must change to send a frame
+  min_observation_interval_s: 10
+  default_watch_interval_s: 300  # heartbeat until Claude chooses its own
+  jpeg_quality: 80
+  min_face_px: 40           # smaller faces are ignored
+  match_confident: 0.50     # SFace cosine similarity for a confident match
+  match_maybe: 0.363        # ...and for "not sure" (SFace's suggested threshold)
+  max_views_per_person: 8
+  pending_forget_after_s: 600   # unsaved people are dropped 10 minutes after leaving view
+  track_timeout_s: 2
 
 face:
   fps: 30
