@@ -61,6 +61,31 @@ class AgentConfig(_Section):
     request_timeout_s: float = 60.0
     one_moment_after_s: float = 3.0
     retry_delays_s: list[float] = Field(default_factory=lambda: [1.0, 4.0])
+    compact_at_tokens: int = Field(60_000, ge=50_000)
+    """Server-side compaction summarises older history beyond this many input tokens."""
+
+
+class VisionConfig(_Section):
+    enabled: bool = True
+    camera_index: int = 0
+    analyze_hz: float = 4.0
+    """Face detection rate while something is happening (1 Hz when the scene is still)."""
+    gate_pixel_delta: int = 25
+    """Grey-level change (0-255) for a pixel to count as changed."""
+    gate_change_fraction: float = 0.03
+    """Share of changed pixels that makes a frame worth sending."""
+    min_observation_interval_s: float = 10.0
+    default_watch_interval_s: float = 300.0
+    """Heartbeat: an observation at least this often, until Claude sets its own interval."""
+    jpeg_quality: int = Field(80, ge=30, le=95)
+    min_face_px: int = 40
+    match_confident: float = 0.50
+    match_maybe: float = 0.363
+    """SFace cosine similarity: above maybe = "not sure", above confident = a match."""
+    max_views_per_person: int = 8
+    pending_forget_after_s: float = 600.0
+    """Unsaved (pending or declined) people are dropped this long after leaving view."""
+    track_timeout_s: float = 2.0
 
 
 class FaceConfig(_Section):
@@ -86,6 +111,7 @@ class Config(_Section):
     tts: TtsConfig = Field(default_factory=TtsConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
     face: FaceConfig = Field(default_factory=FaceConfig)
+    vision: VisionConfig = Field(default_factory=VisionConfig)
     net: NetConfig = Field(default_factory=NetConfig)
     household: HouseholdConfig = Field(default_factory=HouseholdConfig)
 
