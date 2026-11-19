@@ -94,8 +94,12 @@ def report_billed(platform: Platform, config: Config, days: int | None) -> int:
     admin_key = platform.paths.get_secret("ANTHROPIC_ADMIN_KEY")
     print()
     if not admin_key:
-        print("Billed amount from your Anthropic account: add an Admin API key to .env as "
-              "ANTHROPIC_ADMIN_KEY=sk-ant-admin... (Console > Settings > Admin keys) to see it.")
+        print("Billed amount from your Anthropic account: add an Admin API key to .env as\n"
+              "  ANTHROPIC_ADMIN_KEY=sk-ant-admin01-...\n"
+              "Create it at https://platform.claude.com/settings/admin-keys (organization admins\n"
+              "only; an individual account first sets up an organization at\n"
+              "https://platform.claude.com/settings/organization). Without it, the Console's\n"
+              "Usage and Cost pages show your account's billed totals.")
         return 0
     now = datetime.now(UTC)
     if days:
