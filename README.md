@@ -1,0 +1,2 @@
+# cadbot
+Friendly desktop assistant
