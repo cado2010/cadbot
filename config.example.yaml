@@ -1,0 +1,61 @@
+# cadbot configuration. Copy to config.yaml (which Git ignores) and edit.
+# Every key is optional: anything left out uses the default shown here.
+# Secrets never go in this file; the API key lives in .env (see .env.example).
+
+audio:
+  input_device: null        # part of the mic's name, e.g. "Headset"; null = system default
+  output_device: null       # part of the speaker's name; null = system default
+  vad_threshold: 0.5        # Silero speech probability that counts as speech
+  end_silence_ms: 700       # a turn ends after this much silence
+  min_speech_ms: 250        # shorter blips (coughs, clicks) are ignored
+  max_utterance_s: 30
+  pre_roll_ms: 300          # audio kept from just before speech started
+  half_duplex_tail_ms: 300  # without echo cancellation: mic stays muted this long after speaking
+  barge_in_min_s: 0.4       # with echo cancellation: speech this long interrupts cadbot
+
+stt:
+  model: small.en           # faster-whisper model; base.en if the Pi is too slow
+  device: auto              # auto | cuda | cpu
+  compute_type_cpu: int8
+  compute_type_cuda: int8_float16
+  beam_size: 1
+  language: en
+  hotwords: cadbot           # helps Whisper hear the name correctly
+
+tts:
+  voices:
+    en: en_US-lessac-medium
+
+agent:
+  model: claude-opus-5-5
+  effort: low               # low keeps spoken replies quick; Opus 5.5 always thinks
+  max_tokens: 1500          # includes thinking; speak() still limits replies to ~60 words
+  max_tool_rounds: 8
+  speak_max_words: 60
+  web_search_max_uses: 3
+  fallbacks: default        # server-side fallback model on refusals; "off" to disable
+  request_timeout_s: 60
+  one_moment_after_s: 3
+  retry_delays_s: [1, 4]
+
+face:
+  fps: 30
+  idle_after_speech_s: 2.5
+
+net:
+  health_url: https://api.anthropic.com/
+  health_interval_s: 30
+  failures_before_offline: 2
+  canned_min_interval_s: 60
+
+household:
+  # Free text added to the system prompt, e.g. greeting habits and quiet hours.
+  wishes: ""
+
+# Per-platform overrides, applied on top of everything above.
+platforms:
+  windows: {}
+  pi:
+    stt:
+      device: cpu
+  fake: {}

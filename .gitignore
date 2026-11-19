@@ -221,3 +221,63 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---------------------------------------------------------------------------
+# cadbot: never in the repo (docs/cadbot-design.md, "Open-source release")
+# ---------------------------------------------------------------------------
+# Keys and secrets
+.env
+.env.*
+!.env.example
+secrets.env
+*.secret
+client_secret*.json
+credentials*.json
+token*.json
+*.pem
+*.key
+
+# Local configuration (copy config.example.yaml to config.yaml)
+config.yaml
+config.*.yaml
+!config.example.yaml
+
+# Databases and runtime data
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+/data/
+/memories/
+
+# Face data and photos
+/faces/
+/thumbnails/
+/photos/
+*.npy
+
+# Logs
+/logs/
+*.log
+
+# Model and voice files (downloaded by `python -m cadbot.models ensure`)
+/models/
+/voices/
+*.onnx
+*.bin
+*.part
+
+# Recordings and captured media of real people
+/recordings/
+/captures/
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.mp4
+*.avi
+*.webm
+# ...except licensed test media, each with a <file>.LICENSE note (checked by tests)
+!tests/media/**
