@@ -104,6 +104,7 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
     tts = PiperTTS(voice_files(models_dir))
     speech = SpeechOutput(tts, audio_out)
     face = Face(display, level=speech.level, fps=config.face.fps)
+    face.gaze_gain, face.gaze_flip = config.face.gaze_gain, config.face.gaze_flip
     canned = CannedClips(tts, speech, config.net.canned_min_interval_s)
     bus = EventBus()
     location = await start_location(platform, config, bus)

@@ -51,7 +51,7 @@ IRIS = (64, 132, 186)
 IRIS_RIM = (34, 80, 124)
 PUPIL = (10, 12, 20)
 MOUTH_COLOUR = (226, 232, 240)
-PUPIL_RANGE = (0.24, 0.20)
+PUPIL_RANGE = (0.32, 0.26)
 """How far the iris moves from the centre, as a share of the eye's width and height."""
 
 DIRECTIONS: dict[int, tuple[float, float]] = {
@@ -90,6 +90,10 @@ class Face:
         self._glance = (0.0, 0.0)
         self._next_glance = 0.0
         self._confused_until = 0.0
+        self.gaze_gain = 1.8
+        """How strongly the pupils follow a person (the camera's view is wide)."""
+        self.gaze_flip = False
+        """Set if the eyes follow the wrong way (some cameras deliver mirrored images)."""
         self.preview: Callable[[], Preview | None] | None = None
         """Camera preview source (lower-left corner); None hides it."""
         self._preview_surface: tuple[int, pygame.Surface] | None = None
@@ -132,10 +136,10 @@ class Face:
             self.set(expression)
 
     def set_gaze_point(self, point: tuple[float, float] | None) -> None:
-        """Look at a person (x, y in -1..1), or let go with None. Only the pupils move.
-
-        Ignored while the expression has its own direction (thinking looks up, sad looks
-        down) or Claude chose one with set_face(look=...). A small dead zone stops jitter.
+        """Look at a person (x, y in -1..1 in the camera image, already mirrored), or let go
+        with None. Only the pupils move. A person in view wins over the expression's own
+        direction; only a direction Claude chose with set_face(look=...) wins over them. A
+        small dead zone stops jitter.
         """
         if point is None:
             self._gaze = None
@@ -186,12 +190,14 @@ class Face:
 
     def _pupil_target(self, now: float) -> tuple[float, float]:
         spec = EXPRESSIONS[self.state.expression]
-        if self.state.look is not None:
+        if self.state.look is not None:  # Claude chose a direction on purpose
             x, y = DIRECTIONS[LOOKS[self.state.look]]
-        elif spec.position != DEFAULT:
+        elif self._gaze is not None:  # someone is in view: look at them
+            gx, gy = self._gaze
+            x = gx * self.gaze_gain * (-1 if self.gaze_flip else 1)
+            y = gy * self.gaze_gain
+        elif spec.position != DEFAULT:  # the expression's own direction (thinking: up-left)
             x, y = DIRECTIONS[spec.position]
-        elif self._gaze is not None:
-            x, y = self._gaze
         elif spec.idle:
             if now >= self._next_glance:  # an occasional small glance, like a real face
                 glance = random.random() < 0.6

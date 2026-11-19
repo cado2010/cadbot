@@ -95,12 +95,18 @@ class VisionConfig(_Section):
     pending_forget_after_s: float = 600.0
     """Unsaved (pending or declined) people are dropped this long after leaving view."""
     track_timeout_s: float = 2.0
+    gaze_hold_s: float = 3.0
+    """Keep looking where a face was for this long after losing it."""
 
 
 class FaceConfig(_Section):
     fps: int = 30
     idle_after_speech_s: float = 2.5
     camera_preview: bool = True
+    gaze_gain: float = Field(1.8, ge=0.5, le=4.0)
+    """How strongly the pupils follow the person in view. Raise it if they barely move."""
+    gaze_flip: bool = False
+    """Set true if the eyes look away from you instead of at you."""
     """Show a small mirrored camera view in the lower-left corner, with face boxes, so
     people can see whether they're in frame. Shown on screen only, never saved."""
 

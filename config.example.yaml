@@ -59,9 +59,12 @@ vision:
   max_views_per_person: 8
   pending_forget_after_s: 600   # unsaved people are dropped 10 minutes after leaving view
   track_timeout_s: 2
+  gaze_hold_s: 3            # keep looking where a face was for this long after losing it
 
 face:
   camera_preview: true      # small mirrored camera view, lower-left corner (screen only)
+  gaze_gain: 1.8            # how strongly the pupils follow you; raise if they barely move
+  gaze_flip: false          # true if the eyes look away from you instead of at you
   fps: 30
   idle_after_speech_s: 2.5
 

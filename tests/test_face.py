@@ -142,18 +142,42 @@ def test_the_face_never_moves_only_the_pupils(display: PygameDisplay) -> None:
         assert abs(x - centre[0]) <= 1 and abs(y - centre[1]) <= 1, name  # eyes stay put
         assert not face.eyes.idle
         assert face._mouth_centre() == face._mouth_centre(face.eyes)  # mouth fixed
+
+    def settle() -> tuple[float, float]:
+        for _ in range(25):
+            face.tick()
+        return face._pupil
+
     face.set("neutral")
-    for _ in range(20):
+    face.set_gaze_point((0.4, 0.0))
+    assert settle()[0] == pytest.approx(0.4 * face.gaze_gain, abs=0.02)  # amplified
+    face.set("thinking")  # someone in view: they win over thinking's up-left glance
+    assert settle()[0] > 0.6
+    face.set_gaze_point(None)  # nobody in view: the expression's own direction
+    x, y = settle()
+    assert x < -0.5 and y < -0.5
+    face.set_gaze_point((0.5, 0.0))
+    face.set("neutral", look="down")  # a direction Claude chose wins over everything
+    x, y = settle()
+    assert y > 0.8 and abs(x) < 0.1
+
+
+def test_gaze_follows_a_person_across_the_frame(display: PygameDisplay) -> None:
+    face = Face(display)
+    face.set("neutral")
+    positions = []
+    for camera_x in (-0.6, -0.2, 0.2, 0.6):  # walking across in front of the device
+        face.set_gaze_point((camera_x, 0.0))
+        for _ in range(25):
+            face.tick()
+        positions.append(face._pupil[0])
+    assert positions == sorted(positions)  # pupils move steadily the same way
+    assert positions[-1] - positions[0] > 1.5  # clearly visible, not a twitch
+    face.gaze_flip = True
+    face.set_gaze_point((0.61, 0.0))
+    for _ in range(25):
         face.tick()
-    assert face._pupil[0] > 0.8  # following a person moves the pupils right
-    face.set("thinking")
-    for _ in range(20):
-        face.tick()
-    assert face._pupil[0] < -0.5 and face._pupil[1] < -0.5  # thinking looks up-left
-    face.set("neutral", look="down")
-    for _ in range(20):
-        face.tick()
-    assert face._pupil[1] > 0.8 and abs(face._pupil[0]) < 0.1  # Claude's look wins
+    assert face._pupil[0] < -0.9  # flipped for cameras that mirror their image
 
 
 def test_pupils_are_drawn_inside_the_eyes(display: PygameDisplay) -> None:

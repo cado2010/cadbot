@@ -244,7 +244,7 @@ class VisionLoop:
     def _update_gaze(self, frame: Frame, now: float) -> None:
         target = self._gaze_target()
         if target is None:
-            if now - self._last_face_seen > 2.0:  # hold the last direction for ~2 s
+            if now - self._last_face_seen > self.cfg.gaze_hold_s:  # ride out brief drop-outs
                 self.on_gaze(None)
             return
         h, w = frame.image.shape[:2]
