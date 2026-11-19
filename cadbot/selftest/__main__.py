@@ -248,11 +248,14 @@ async def check_agent_request(platform: Platform) -> str:
     key = platform.paths.get_secret("ANTHROPIC_API_KEY")
     if not key:
         raise RuntimeError("ANTHROPIC_API_KEY not found (environment or .env)")
-    snapshot = Snapshot(to_jpeg(test_pattern()), datetime.now(), False, "No faces in view.")
+    images = config.vision.send_to_claude == "images"
+    snapshot = Snapshot(to_jpeg(test_pattern()) if images else None, datetime.now(), False,
+                        "No faces in view.")
     event = Utterance("cadbot, can you hear me? Just say yes.", datetime.now(), 1.0,
                       snapshot=snapshot)
     params = request_params(
-        config.agent, build_system_prompt(platform.capabilities, platform.name),
+        config.agent, build_system_prompt(platform.capabilities, platform.name,
+                                          camera=config.vision.send_to_claude),
         build_registry(config.agent).api_definitions(),
         [{"role": "user", "content": render_event(event)}])
     client = AnthropicClient(key, 60)

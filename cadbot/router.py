@@ -23,6 +23,7 @@ def _utterance_line(event: Utterance) -> str:
 
 
 def _image_block(snapshot: Snapshot) -> dict[str, Any]:
+    assert snapshot.jpeg is not None
     return {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                         "data": base64.standard_b64encode(snapshot.jpeg).decode()}}
 
@@ -53,7 +54,8 @@ def render_event(event: Event, notes: list[str] | None = None) -> list[dict[str,
         raise TypeError(f"no renderer for {type(event).__name__}")
     content: list[dict[str, Any]] = []
     if snapshot is not None:
-        content.append(_image_block(snapshot))
+        if snapshot.jpeg is not None:
+            content.append(_image_block(snapshot))
         lines.append(_camera_line(snapshot))
     content.append({"type": "text", "text": "\n".join(lines)})
     return content

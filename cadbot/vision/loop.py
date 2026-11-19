@@ -124,11 +124,21 @@ class VisionLoop:
             new_tracks = self._update_tracks(faces, frame, now)
         self._update_gaze(frame, now)
         self.people.expire_unsaved(now)
-        reason = self.gate.check(grey, now, new_face=bool(new_tracks))
-        if reason and self.observations_enabled:
+        reason = self._observation_reason(grey, now, new_face=bool(new_tracks))
+        if reason:
             self.gate.mark_sent(grey, now)
             self.emit(Observation(self.snapshot(), reason))
         return moving or bool(self.tracker.tracks)
+
+    def _observation_reason(self, grey: np.ndarray, now: float, new_face: bool) -> str | None:
+        """Whether to send Claude an observation now, given the cost setting."""
+        mode = self.cfg.send_to_claude
+        if mode == "none" or not self.observations_enabled:
+            return None
+        reason = self.gate.check(grey, now, new_face=new_face)
+        if mode == "readings" and reason == "the scene changed":
+            return None  # without an image a mere scene change tells Claude nothing
+        return reason
 
     def _update_tracks(self, faces: list, frame: Frame, now: float) -> list[Track]:
         seen, new = self.tracker.update(faces, now)
@@ -157,8 +167,10 @@ class VisionLoop:
         if self._snapshot_cache is not None and self._snapshot_cache[0] == key:
             cached = self._snapshot_cache[1]
             return Snapshot(cached.jpeg, cached.taken_at, cached.is_night, self.readings())
-        snap = Snapshot(to_jpeg(frame.image, quality=self.cfg.jpeg_quality),
-                        datetime.fromtimestamp(frame.timestamp), frame.is_night,
+        jpeg = None
+        if self.cfg.send_to_claude == "images":
+            jpeg = to_jpeg(frame.image, quality=self.cfg.jpeg_quality)
+        snap = Snapshot(jpeg, datetime.fromtimestamp(frame.timestamp), frame.is_night,
                         self.readings())
         self._snapshot_cache = (key, snap)
         return snap

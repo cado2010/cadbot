@@ -65,8 +65,17 @@ class AgentConfig(_Section):
     """Server-side compaction summarises older history beyond this many input tokens."""
 
 
+CameraToClaude = Literal["images", "readings", "none"]
+
+
 class VisionConfig(_Section):
     enabled: bool = True
+    """False switches the camera off entirely (no recognition, no eye-following)."""
+    send_to_claude: CameraToClaude = "images"
+    """Cost control; face recognition keeps running locally in every mode.
+    images: frames and face readings on scene change, new face or heartbeat.
+    readings: face readings as text only, when someone appears or at the heartbeat.
+    none: no camera events; what you say still carries who is in view, as text."""
     camera_index: int = 0
     analyze_hz: float = 4.0
     """Face detection rate while something is happening (1 Hz when the scene is still)."""

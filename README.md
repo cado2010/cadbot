@@ -73,6 +73,13 @@ window to cut it off; close the window to quit. See whom it remembers with
 `uv run python -m cadbot.admin people`. Optional settings (microphone name, Whisper on
 the GPU, household wishes) go in `config.yaml`: copy `config.example.yaml` to start.
 
+**Keeping costs down.** Every camera frame sent to Claude costs about 300 image tokens. In
+`config.yaml`, `vision.send_to_claude: readings` sends only the face readings as text (who is in
+view) when someone appears; `none` sends no camera events at all. Face recognition keeps running
+on the PC either way, so cadbot still greets people by name when they talk to it.
+`vision.enabled: false` switches the camera off completely. Set a monthly spend limit in the
+Claude Console too.
+
 **Troubleshooting**
 
 - *`invalid peer certificate: UnknownIssuer` from uv:* something on the PC (antivirus, a

@@ -95,3 +95,12 @@ def test_validate_input() -> None:
     assert ">=" in str(validate_input(schema, {"n": -1}))
     assert "unknown field" in str(validate_input(schema, {"n": 1, "x": 2}))
     assert validate_input(schema, "nope") == "input must be an object"
+
+
+def test_prompt_tells_claude_when_images_are_off() -> None:
+    caps = Capabilities()
+    assert "camera images are not sent" in build_system_prompt(caps, "windows",
+                                                               camera="readings")
+    assert "no camera events" in build_system_prompt(caps, "windows", camera="none")
+    assert "camera is switched off" in build_system_prompt(caps, "windows", camera="off")
+    assert "To save cost" not in build_system_prompt(caps, "windows")

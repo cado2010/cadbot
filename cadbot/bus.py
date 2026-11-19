@@ -17,7 +17,8 @@ from datetime import datetime
 class Snapshot:
     """What the camera shows right now: a 640x360 JPEG plus the face readings."""
 
-    jpeg: bytes
+    jpeg: bytes | None
+    """None when images aren't sent to Claude (vision.send_to_claude)."""
     taken_at: datetime
     is_night: bool
     readings: str

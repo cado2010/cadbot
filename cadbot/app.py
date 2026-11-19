@@ -123,7 +123,7 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
                            failures_before_offline=config.net.failures_before_offline,
                            on_change=on_health_change)
     system_prompt = build_system_prompt(platform.capabilities, platform.name,
-                                        config.household.wishes)
+                                        config.household.wishes, camera=camera_mode(config))
 
     people = open_people(platform, config)
     vision = make_vision(platform, config, people, bus)
@@ -189,6 +189,10 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
         display.close()
         people.store.close()
     return 0
+
+
+def camera_mode(config: Config) -> str:
+    return config.vision.send_to_claude if config.vision.enabled else "off"
 
 
 def open_people(platform: Platform, config: Config) -> PeopleRegistry:

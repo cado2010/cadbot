@@ -193,3 +193,43 @@ async def test_same_frame_is_not_processed_twice(people: PeopleRegistry) -> None
     calls = analyzer.calls
     await loop.step()
     assert analyzer.calls == calls
+
+
+# ----------------------------------------------------------------------- cost setting
+
+
+@pytest.mark.parametrize("mode", ["images", "readings", "none"])
+async def test_send_to_claude_modes(people: PeopleRegistry, mode: str) -> None:
+    loop, reader, analyzer, sent, _ = make_loop(people)
+    loop.cfg.send_to_claude = mode  # type: ignore[assignment]
+    clock = loop.clock_ref  # type: ignore[attr-defined]
+    reader.push(frame(60))
+    await loop.step()  # first frame
+    clock[0] = 20.0
+    reader.push(frame(200))
+    await loop.step()  # the scene changed, no faces
+    clock[0] = 40.0
+    analyzer.faces = [face(3)]
+    reader.push(frame(60))
+    await loop.step()  # someone appears
+    reasons = [o.reason for o in sent]
+    if mode == "images":
+        assert reasons == ["first frame", "the scene changed", "a new face appeared"]
+        assert all(o.snapshot.jpeg for o in sent)
+    elif mode == "readings":
+        assert reasons == ["first frame", "a new face appeared"]
+        assert all(o.snapshot.jpeg is None for o in sent)
+        assert "track 1: unknown" in sent[-1].snapshot.readings
+    else:
+        assert sent == []
+    # local recognition runs in every mode
+    assert len(loop.tracker.visible()) == 1
+    snap = loop.snapshot()
+    assert snap is not None and (snap.jpeg is not None) == (mode == "images")
+
+
+def test_router_without_an_image() -> None:
+    snap = Snapshot(None, datetime(2026, 11, 19, 20, 0), False, "1 face in view: track 1")
+    content = render_event(Utterance("hello", datetime.now(), 1.0, snapshot=snap))
+    assert [b["type"] for b in content] == ["text"]
+    assert "Faces: 1 face in view" in content[0]["text"]

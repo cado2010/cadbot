@@ -40,7 +40,12 @@ agent:
   compact_at_tokens: 60000  # server-side compaction summarises older history past this
 
 vision:
-  enabled: true
+  enabled: true             # false: camera off entirely (no recognition, no eye-following)
+  # What goes to Claude (cost control). Face recognition keeps running locally either way.
+  #   images:   frames + face readings on scene change, new face or heartbeat (most expensive)
+  #   readings: face readings as text only, when someone appears or at the heartbeat
+  #   none:     no camera events; what people say still carries who is in view, as text
+  send_to_claude: images
   camera_index: 0           # 0 = first webcam
   analyze_hz: 4             # face detection rate while something is happening
   gate_pixel_delta: 25      # frame gate: how much a pixel must change to count
