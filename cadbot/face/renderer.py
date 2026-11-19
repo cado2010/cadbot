@@ -2,15 +2,20 @@
 # Copyright (C) 2026 cadbot contributors
 """Draws the face in the Display. Animation only: Claude chooses every expression.
 
-RoboEyes animates in a small logical space (320 x 135 units) and the framebuffer adapter
-draws its shapes 4x larger, straight onto the top of the 1280x720 screen, with smooth
-edges. cadbot draws the mouth below, then the stop button and status icons.
+The face never moves around the screen: the eyes and mouth stay put, and only the
+expression changes (eyelids, eye shape, blinks, mouth). RoboEyes animates the eye shapes in a
+small logical space, drawn 4x larger with smooth edges. cadbot adds an iris and pupil inside
+each eye, clipped to the eye's current shape so eyelids and blinks cover them, and moves only
+the pupils: to look at someone, up while thinking, or down when sad.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import math
+import random
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -20,19 +25,33 @@ from cadbot.face.expressions import DEFAULT_PRESETS, EXPRESSIONS, LOOKS, Express
 from cadbot.face.fb_pygame import PygameFrameBuffer
 from cadbot.face.mouth import draw_mouth
 from cadbot.platform.base import Display, InputEvent
-from cadbot.vendor.roboeyes import DEFAULT, OFF, ON, RoboEyes
+from cadbot.vendor.roboeyes import DEFAULT, NE, NW, OFF, ON, SE, SW, E, N, RoboEyes, S, W
 
 log = logging.getLogger(__name__)
 
 SCALE = 4  # logical RoboEyes units -> screen pixels
 EYE_LOGICAL = (288, 120)
-# Where the eyes may move, with a margin so they never touch the screen edge.
 EYE_AREA = pygame.Rect(64, 60, EYE_LOGICAL[0] * SCALE, EYE_LOGICAL[1] * SCALE)
-BASE_EYE = {"width": 68, "height": 76, "radius": 20, "spacing": 36}
-MOUTH_GAP = 18  # logical units between the bottom of the eyes and the mouth
+BASE_EYE = {"width": 54, "height": 58, "radius": 25, "spacing": 48}
+MOUTH_GAP = 20  # logical units between the bottom of the eyes and the mouth
+MOUTH_CENTRE = (EYE_AREA.centerx,
+                EYE_AREA.y + round((EYE_LOGICAL[1] / 2 + BASE_EYE["height"] / 2 + MOUTH_GAP)
+                                   * SCALE))
 STOP_BUTTON = pygame.Rect(1090, 600, 160, 80)
-ACCENT = (90, 210, 255)
+
 BACKGROUND = (8, 10, 18)
+SCLERA = (236, 240, 246)
+IRIS = (64, 132, 186)
+IRIS_RIM = (34, 80, 124)
+PUPIL = (10, 12, 20)
+MOUTH_COLOUR = (226, 232, 240)
+PUPIL_RANGE = (0.24, 0.20)
+"""How far the iris moves from the centre, as a share of the eye's width and height."""
+
+DIRECTIONS: dict[int, tuple[float, float]] = {
+    DEFAULT: (0.0, 0.0), N: (0.0, -1.0), NE: (0.7, -0.7), E: (1.0, 0.0), SE: (0.7, 0.7),
+    S: (0.0, 1.0), SW: (-0.7, 0.7), W: (-1.0, 0.0), NW: (-0.7, -0.7),
+}
 
 
 @dataclass
@@ -60,11 +79,14 @@ class Face:
         self.callbacks = callbacks or FaceCallbacks()
         self.state = FaceState()
         self._font: pygame.font.Font | None = None
-        self._mouth_pos: tuple[float, float] | None = None
         self._gaze: tuple[float, float] | None = None
+        self._pupil = (0.0, 0.0)
+        self._glance = (0.0, 0.0)
+        self._next_glance = 0.0
+        self._confused_until = 0.0
         self._running = False
         self._version = 0
-        self.fb = PygameFrameBuffer(display.surface.subsurface(EYE_AREA), BACKGROUND, ACCENT,
+        self.fb = PygameFrameBuffer(display.surface.subsurface(EYE_AREA), BACKGROUND, SCLERA,
                                     scale=SCALE)
         # RoboEyes draws once inside its constructor, so all state above must exist first.
         self.eyes = RoboEyes(self.fb, *EYE_LOGICAL, frame_rate=fps, on_show=self._on_show)
@@ -81,11 +103,10 @@ class Face:
         if look is not None and look not in LOOKS:
             raise ValueError(f"unknown look {look!r}")
         self._version += 1
-        self._gaze = None  # the next gaze update re-aims the eyes
         spec = EXPRESSIONS[expression]
         intensity = max(0.0, min(1.0, intensity))
         self.state.expression, self.state.intensity, self.state.look = expression, intensity, look
-        self._apply(spec, intensity, look)
+        self._apply(spec, intensity)
 
     def set_presets(self, presets: dict[str, str | None]) -> None:
         for moment, expression in presets.items():
@@ -102,24 +123,19 @@ class Face:
             self.set(expression)
 
     def set_gaze_point(self, point: tuple[float, float] | None) -> None:
-        """Point the eyes at a person (x, y in -1..1), or let go with None.
+        """Look at a person (x, y in -1..1), or let go with None. Only the pupils move.
 
-        Following only applies to expressions that look straight ahead and when Claude
-        hasn't chosen a direction with set_face(look=...); a small dead zone stops jitter.
+        Ignored while the expression has its own direction (thinking looks up, sad looks
+        down) or Claude chose one with set_face(look=...). A small dead zone stops jitter.
         """
-        spec = EXPRESSIONS[self.state.expression]
-        if point is None or self.state.look is not None or spec.position != DEFAULT:
-            if self._gaze is not None:
-                self._gaze = None
-                self._apply(spec, self.state.intensity, self.state.look)
+        if point is None:
+            self._gaze = None
             return
         last = self._gaze
         if last is not None and abs(point[0] - last[0]) < 0.08 \
                 and abs(point[1] - last[1]) < 0.08:
             return
         self._gaze = point
-        self.eyes.set_idle_mode(OFF)
-        self.eyes.look_at(point[0], point[1] * 0.6)
 
     def schedule_preset(self, moment: str, delay_s: float) -> None:
         """Apply a preset later, unless the expression changes before then."""
@@ -142,7 +158,7 @@ class Face:
 
     # ----------------------------------------------------------------- animation
 
-    def _apply(self, spec: Expression, intensity: float, look: str | None) -> None:
+    def _apply(self, spec: Expression, intensity: float) -> None:
         sx = 1 + (spec.eye_scale[0] - 1) * intensity
         sy = 1 + (spec.eye_scale[1] - 1) * intensity
         w, h = round(BASE_EYE["width"] * sx), round(BASE_EYE["height"] * sy)
@@ -153,13 +169,37 @@ class Face:
         self.eyes.eyeLwidthCurrent = self.eyes.eyeRwidthCurrent = w
         self.eyes.spaceBetweenCurrent = self.eyes.spaceBetweenNext
         self.eyes.mood = spec.mood
-        self.eyes.set_idle_mode(ON if spec.idle and look is None else OFF, 2, 2)
+        self.eyes.set_idle_mode(OFF)  # the eyes never wander; only the pupils glance
         self.eyes.set_auto_blinker(ON, *spec.blink)
-        self.eyes.position = LOOKS[look] if look else spec.position
-        if spec.anim == "laugh":
-            self.eyes.laugh()
-        elif spec.anim == "confuse":
-            self.eyes.confuse()
+        self.eyes.position = DEFAULT  # always centred: the face stays still
+        if spec.anim == "confuse":
+            self._confused_until = time.monotonic() + 0.6
+
+    def _pupil_target(self, now: float) -> tuple[float, float]:
+        spec = EXPRESSIONS[self.state.expression]
+        if self.state.look is not None:
+            x, y = DIRECTIONS[LOOKS[self.state.look]]
+        elif spec.position != DEFAULT:
+            x, y = DIRECTIONS[spec.position]
+        elif self._gaze is not None:
+            x, y = self._gaze
+        elif spec.idle:
+            if now >= self._next_glance:  # an occasional small glance, like a real face
+                glance = random.random() < 0.6
+                self._glance = (random.uniform(-0.5, 0.5), random.uniform(-0.3, 0.3)) \
+                    if glance else (0.0, 0.0)
+                self._next_glance = now + random.uniform(2.0, 5.0)
+            x, y = self._glance
+        else:
+            x, y = 0.0, 0.0
+        if now < self._confused_until:  # a quick puzzled look from side to side
+            x += 0.6 * math.sin(now * 28)
+        return max(-1.0, min(1.0, x)), max(-1.0, min(1.0, y))
+
+    def _update_pupils(self) -> None:
+        tx, ty = self._pupil_target(time.monotonic())
+        px, py = self._pupil
+        self._pupil = (px + (tx - px) * 0.35, py + (ty - py) * 0.35)
 
     def handle_events(self, events: list[InputEvent]) -> None:
         for event in events:
@@ -175,27 +215,53 @@ class Face:
                 and STOP_BUTTON.collidepoint(event.pos))
 
     def _on_show(self, eyes: RoboEyes) -> None:
+        self._draw_irises(eyes)
         mouth = EXPRESSIONS[self.state.expression].mouth
         screen = self.display.surface
         _clear_outside(screen, EYE_AREA)
         draw_mouth(screen, self._mouth_centre(eyes), mouth, open_amount=self.level(),
-                   intensity=self.state.intensity, scale=SCALE, colour=ACCENT)
+                   intensity=self.state.intensity, scale=SCALE, colour=MOUTH_COLOUR)
         if self.state.show_stop:
             self._draw_stop_button(screen)
         if self.state.status == "offline":
             _draw_no_wifi(screen, (1200, 70))
         self.display.present()
 
-    def _mouth_centre(self, e: RoboEyes) -> tuple[int, int]:
-        """Under the eyes, following them as they look around, eased like the eyes."""
-        x = e.eyeLxNext + (e.eyeLwidthNext + e.spaceBetweenNext + e.eyeRwidthNext) / 2
-        y = e.eyeLyNext + e.eyeLheightDefault + MOUTH_GAP
-        target = (EYE_AREA.x + x * SCALE, EYE_AREA.y + y * SCALE)
-        if self._mouth_pos is None:
-            self._mouth_pos = target
-        px, py = self._mouth_pos
-        self._mouth_pos = (px + (target[0] - px) * 0.5, py + (target[1] - py) * 0.5)
-        return round(self._mouth_pos[0]), round(self._mouth_pos[1])
+    def _mouth_centre(self, _eyes: RoboEyes | None = None) -> tuple[int, int]:
+        """Fixed: the mouth never moves around the screen."""
+        return MOUTH_CENTRE
+
+    def _iris_centre(self, eye_cx: float, eye_cy: float) -> tuple[float, float]:
+        """Iris centre in eye-area pixels: the eye's centre (logical units) plus the pupil
+        offset."""
+        return (eye_cx * SCALE + self._pupil[0] * PUPIL_RANGE[0] * BASE_EYE["width"] * SCALE,
+                eye_cy * SCALE + self._pupil[1] * PUPIL_RANGE[1] * BASE_EYE["height"] * SCALE)
+
+    def _draw_irises(self, e: RoboEyes) -> None:
+        """Iris, pupil and highlight inside each eye, clipped to the visible white of the eye
+        (so eyelids, happy cheeks and blinks cover them)."""
+        area = self.fb.surface
+        iris_r = round(BASE_EYE["width"] * SCALE * 0.30)
+        for x, y, w, h in ((e.eyeLx, e.eyeLy, e.eyeLwidthCurrent, e.eyeLheightCurrent),
+                           (e.eyeRx, e.eyeRy, e.eyeRwidthCurrent, e.eyeRheightCurrent)):
+            if w <= 2 or h <= 2:
+                continue
+            rect = pygame.Rect(x * SCALE, y * SCALE, w * SCALE, h * SCALE).clip(area.get_rect())
+            if rect.w <= 0 or rect.h <= 0:
+                continue
+            eye = area.subsurface(rect)
+            white = pygame.mask.from_threshold(eye, (*SCLERA, 255), (40, 40, 40, 255))
+            overlay = pygame.Surface(rect.size, pygame.SRCALPHA)
+            ix, iy = self._iris_centre(x + w / 2, y + h / 2)
+            centre = (round(ix - rect.x), round(iy - rect.y))
+            pygame.draw.aacircle(overlay, IRIS_RIM, centre, iris_r)
+            pygame.draw.aacircle(overlay, IRIS, centre, round(iris_r * 0.84))
+            pygame.draw.aacircle(overlay, PUPIL, centre, round(iris_r * 0.46))
+            glint = (centre[0] - round(iris_r * 0.32), centre[1] - round(iris_r * 0.34))
+            pygame.draw.aacircle(overlay, (255, 255, 255), glint, max(2, round(iris_r * 0.16)))
+            clip = white.to_surface(setcolor=(255, 255, 255, 255), unsetcolor=(0, 0, 0, 0))
+            overlay.blit(clip, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+            eye.blit(overlay, (0, 0))
 
     def _draw_stop_button(self, screen: pygame.Surface) -> None:
         pygame.draw.rect(screen, (200, 60, 60), STOP_BUTTON, border_radius=18)
@@ -207,6 +273,7 @@ class Face:
 
     def tick(self) -> None:
         self.handle_events(self.display.poll_events())
+        self._update_pupils()
         self.eyes.update()
 
     async def run(self) -> None:

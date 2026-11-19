@@ -125,15 +125,45 @@ def test_vendored_roboeyes_fix_keeps_eyes_on_screen(display: PygameDisplay) -> N
     assert face.eyes.eyeLyNext == 0
 
 
-def test_eyes_follow_a_point_only_when_looking_ahead(display: PygameDisplay) -> None:
+def test_the_face_never_moves_only_the_pupils(display: PygameDisplay) -> None:
+    face = Face(display)
+    def pair_centre() -> tuple[float, float]:
+        e = face.eyes
+        return (e.eyeLxNext + (e.eyeLwidthNext + e.spaceBetweenNext + e.eyeRwidthNext) / 2,
+                e.eyeLyNext + e.eyeLheightDefault / 2)
+
+    centre = pair_centre()
+    for name in ("neutral", "thinking", "curious", "sad", "surprised", "happy"):
+        face.set(name, look="left" if name == "happy" else None)
+        face.set_gaze_point((1.0, 0.5))
+        for _ in range(10):
+            face.tick()
+        x, y = pair_centre()
+        assert abs(x - centre[0]) <= 1 and abs(y - centre[1]) <= 1, name  # eyes stay put
+        assert not face.eyes.idle
+        assert face._mouth_centre() == face._mouth_centre(face.eyes)  # mouth fixed
+    face.set("neutral")
+    for _ in range(20):
+        face.tick()
+    assert face._pupil[0] > 0.8  # following a person moves the pupils right
+    face.set("thinking")
+    for _ in range(20):
+        face.tick()
+    assert face._pupil[0] < -0.5 and face._pupil[1] < -0.5  # thinking looks up-left
+    face.set("neutral", look="down")
+    for _ in range(20):
+        face.tick()
+    assert face._pupil[1] > 0.8 and abs(face._pupil[0]) < 0.1  # Claude's look wins
+
+
+def test_pupils_are_drawn_inside_the_eyes(display: PygameDisplay) -> None:
+    from cadbot.face.renderer import IRIS, PUPIL
+
     face = Face(display)
     face.set("neutral")
-    face.set_gaze_point((1.0, 0.0))
-    assert face.eyes.eyeLxNext == face.eyes.get_screen_constraint_X()
-    assert not face.eyes.idle
-    face.set("thinking")  # looks up-left on purpose: following doesn't override it
-    face.set_gaze_point((1.0, 0.0))
-    assert face.eyes.eyeLxNext == 0
-    face.set("neutral")
-    face.set_gaze_point(None)
-    assert face.eyes.idle  # idle glancing comes back when nobody is in view
+    face.eyes.set_auto_blinker(0)
+    for _ in range(30):
+        face.eyes.fpsTimer = -10_000
+        face.tick()
+    pixels = pygame.image.tobytes(display.surface, "RGB")
+    assert bytes(IRIS) in pixels and bytes(PUPIL) in pixels
