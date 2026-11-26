@@ -78,7 +78,7 @@ PUPIL_RANGE = (0.32, 0.26)
 """How far the iris moves from the centre, as a share of the eye's width and height."""
 
 DIRECTIONS: dict[int, tuple[float, float]] = {
-    DEFAULT: (0.0, 0.0), N: (0.0, -1.0), NE: (0.7, -0.7), E: (1.0, 0.0), SE: (0.7, 0.7),
+    DEFAULT: (0.0, 0.0), N: (0.0, -1.0), NE: (0.75, -0.5), E: (1.0, 0.0), SE: (0.7, 0.7),
     S: (0.0, 1.0), SW: (-0.7, 0.7), W: (-1.0, 0.0), NW: (-0.7, -0.7),
 }
 
@@ -209,8 +209,11 @@ class Face:
         sx = 1 + (spec.eye_scale[0] - 1) * intensity
         sy = 1 + (spec.eye_scale[1] - 1) * intensity
         w, h = round(BASE_EYE["width"] * sx), round(BASE_EYE["height"] * sy)
+        h_right = round(h * (1 + (spec.right_eye_height - 1) * intensity))
         self.eyes.eyes_width(w, w)
-        self.eyes.eyes_height(h, h)
+        self.eyes.eyes_height(h, h_right)
+        # a taller right eye grows upwards, bottoms level: a raised eyebrow, not a droop
+        self.eyes.eyeRyRaise = h_right - h
         # RoboEyes works out positions from the *current* (still animating) width, which
         # pushed the eyes off-centre; settle the width first so positions are right.
         self.eyes.eyeLwidthCurrent = self.eyes.eyeRwidthCurrent = w
@@ -322,6 +325,7 @@ class Face:
         (so eyelids, happy cheeks and blinks cover them)."""
         area = self.fb.surface
         iris_r = round(BASE_EYE["width"] * SCALE * 0.30)
+        pupil_scale = EXPRESSIONS[self.state.expression].pupil_scale
         for x, y, w, h in ((e.eyeLx, e.eyeLy, e.eyeLwidthCurrent, e.eyeLheightCurrent),
                            (e.eyeRx, e.eyeRy, e.eyeRwidthCurrent, e.eyeRheightCurrent)):
             if w <= 2 or h <= 2:
@@ -336,7 +340,7 @@ class Face:
             centre = (round(ix - rect.x), round(iy - rect.y))
             pygame.draw.aacircle(overlay, IRIS_RIM, centre, iris_r)
             pygame.draw.aacircle(overlay, IRIS, centre, round(iris_r * 0.84))
-            pygame.draw.aacircle(overlay, PUPIL, centre, round(iris_r * 0.46))
+            pygame.draw.aacircle(overlay, PUPIL, centre, round(iris_r * 0.46 * pupil_scale))
             glint = (centre[0] - round(iris_r * 0.32), centre[1] - round(iris_r * 0.34))
             pygame.draw.aacircle(overlay, (255, 255, 255), glint, max(2, round(iris_r * 0.16)))
             clip = white.to_surface(setcolor=(255, 255, 255, 255), unsetcolor=(0, 0, 0, 0))

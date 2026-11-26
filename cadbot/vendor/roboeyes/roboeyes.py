@@ -219,6 +219,8 @@ class RoboEyes():
 		# curve instead of the eye's own rounded corners (0 = upstream look).
 		self.happyLidRatio = 0.5
 		self.happyLidFlatness = 0
+		# cadbot change 2026-11-26: raise the right eye by this many units (0 = level)
+		self.eyeRyRaise = 0
 		# Space between eyes
 		self.spaceBetweenCurrent = self.spaceBetweenDefault
 		self.spaceBetweenNext = 10
@@ -631,7 +633,8 @@ class RoboEyes():
 		self.eyeLy = (self.eyeLy + self.eyeLyNext)//2
 		# Right eye coordinates
 		self.eyeRxNext = self.eyeLxNext+self.eyeLwidthCurrent+self.spaceBetweenCurrent # right eye's x position depends on left eyes position + the space between
-		self.eyeRyNext = self.eyeLyNext # right eye's y position should be the same as for the left eye
+		# cadbot change 2026-11-26: eyeRyRaise lifts the right eye (a raised-eyebrow look)
+		self.eyeRyNext = self.eyeLyNext - self.eyeRyRaise # right eye's y position should be the same as for the left eye
 		self.eyeRx = (self.eyeRx + self.eyeRxNext)//2
 		self.eyeRy = (self.eyeRy + self.eyeRyNext)//2
 

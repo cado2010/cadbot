@@ -75,6 +75,11 @@ def draw_mouth(surface: pygame.Surface, centre: tuple[int, int], shape: Mouth, *
                   for t in (i / 24 for i in range(25))]
         _stroke(surface, colour, points, width)
         return
+    if shape == "wavy_small":  # a short, gentle wave: curious, mulling something over
+        points = [(cx + (i - 8) * 1.6 * s, cy + 1.6 * s * strength * math.sin(i * 0.8))
+                  for i in range(17)]
+        _stroke(surface, colour, points, width)
+        return
     if shape == "wavy":
         points = [(cx + (i - 12) * 2.2 * s, cy + 2.5 * s * strength * math.sin(i * 0.8))
                   for i in range(25)]

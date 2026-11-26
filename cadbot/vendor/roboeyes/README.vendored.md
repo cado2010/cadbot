@@ -25,4 +25,7 @@ Every change in `roboeyes.py` is marked in the code with a `cadbot change 2026-1
    wide ellipse, a gentler curve than the eye's own rounded corners. The defaults keep
    upstream's look; cadbot uses a shallower, flatter lid so the pupil stays visible.
 
+5. **Raised eye (2026-11-26):** `eyeRyRaise` lifts the right eye by a number of units, so a
+   taller right eye grows upwards (a raised eyebrow) instead of downwards. Default 0, level.
+
 `__init__.py` and `_compat.py` are new files written for cadbot.

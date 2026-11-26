@@ -581,7 +581,7 @@ Claude only chooses the expression name; the face module turns it into RoboEyes 
 | `neutral` | `DEFAULT`, centred, auto-blink + idle on | Slight smile | Nothing is happening |
 | `listening` | `DEFAULT`, eyes taller, idle off | Closed | Someone is talking to it |
 | `thinking` | `DEFAULT`, position `NW`, idle off | Flat | Working out a request or waiting on a tool |
-| `curious` | `CURIOUS`, position `E` or `W` | Lopsided half-smile ("hmm") | A question it finds interesting, or it is searching |
+| `curious` | One eye opened wider and raised (like a lifted eyebrow), enlarged pupils glancing up and to the side | Small, gentle wave | A question it finds interesting, or it is searching |
 | `happy` | `HAPPY` | Smile | Greeting someone, good news, task done |
 | `laughing` | `HAPPY` + `laugh()` | Big smile | Something funny |
 | `sad` | `TIRED`, position `S` | Frown | Bad news, a failed task, someone upset |

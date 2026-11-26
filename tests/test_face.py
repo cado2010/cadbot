@@ -285,13 +285,30 @@ def test_smiling_eyes_keep_the_pupil_visible(display: PygameDisplay) -> None:
     assert face._pupil[1] > 0.9
 
 
-def test_searching_face_is_not_a_round_mouth() -> None:
-    assert EXPRESSIONS["curious"].mouth == "hmm"
-    assert EXPRESSIONS["surprised"].mouth == "small_o"  # an open "o" still suits surprise
-    surface = pygame.Surface((400, 200))
+def test_curious_face_small_wave_and_raised_eye(display: PygameDisplay) -> None:
     from cadbot.face.mouth import draw_mouth
 
-    draw_mouth(surface, (200, 100), "hmm", scale=4, colour=(255, 255, 255))
-    left = [y for y in range(200) if surface.get_at((125, y))[0] > 200]
-    right = [y for y in range(200) if surface.get_at((275, y))[0] > 200]
-    assert left and right and min(right) < min(left)  # one corner higher: lopsided
+    spec = EXPRESSIONS["curious"]
+    assert spec.mouth == "wavy_small" and EXPRESSIONS["confused"].mouth == "wavy"
+    assert EXPRESSIONS["surprised"].mouth == "small_o"  # an open "o" still suits surprise
+    small, big = pygame.Surface((400, 200)), pygame.Surface((400, 200))
+    draw_mouth(small, (200, 100), "wavy_small", scale=4, colour=(255, 255, 255))
+    draw_mouth(big, (200, 100), "wavy", scale=4, colour=(255, 255, 255))
+
+    def width(s: pygame.Surface) -> int:
+        xs = [x for x in range(400) for y in range(80, 120, 2) if s.get_at((x, y))[0] > 200]
+        return max(xs) - min(xs)
+
+    assert width(small) < width(big) * 0.75  # curious's wave is clearly smaller
+
+    face = Face(display)
+    face.set("curious")
+    for _ in range(30):
+        face.tick()
+    e = face.eyes
+    assert e.eyeRheightDefault > e.eyeLheightDefault  # one eye opened wider...
+    assert e.eyeRyRaise == e.eyeRheightDefault - e.eyeLheightDefault  # ...growing upwards
+    assert spec.pupil_scale > 1  # enlarged pupils
+    assert face._pupil[1] < -0.3 and face._pupil[0] > 0.5  # glancing up and aside
+    face.set("neutral")
+    assert face.eyes.eyeRyRaise == 0  # level again
