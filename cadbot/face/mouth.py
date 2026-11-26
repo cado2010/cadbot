@@ -69,6 +69,12 @@ def draw_mouth(surface: pygame.Surface, centre: tuple[int, int], shape: Mouth, *
     if shape == "small_o":
         pygame.draw.aacircle(surface, colour, (cx, cy), round(6 * s), width)
         return
+    if shape == "hmm":  # a lopsided half-smile, one corner up: "hmm, let me see"
+        points = [(cx + (-20 + t * 40) * s,
+                   cy + (2.5 * (1 - (2 * t - 1) ** 2) - 5 * t) * s * strength)
+                  for t in (i / 24 for i in range(25))]
+        _stroke(surface, colour, points, width)
+        return
     if shape == "wavy":
         points = [(cx + (i - 12) * 2.2 * s, cy + 2.5 * s * strength * math.sin(i * 0.8))
                   for i in range(25)]

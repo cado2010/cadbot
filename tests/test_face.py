@@ -283,3 +283,15 @@ def test_smiling_eyes_keep_the_pupil_visible(display: PygameDisplay) -> None:
     for _ in range(40):
         face.tick()
     assert face._pupil[1] > 0.9
+
+
+def test_searching_face_is_not_a_round_mouth() -> None:
+    assert EXPRESSIONS["curious"].mouth == "hmm"
+    assert EXPRESSIONS["surprised"].mouth == "small_o"  # an open "o" still suits surprise
+    surface = pygame.Surface((400, 200))
+    from cadbot.face.mouth import draw_mouth
+
+    draw_mouth(surface, (200, 100), "hmm", scale=4, colour=(255, 255, 255))
+    left = [y for y in range(200) if surface.get_at((125, y))[0] > 200]
+    right = [y for y in range(200) if surface.get_at((275, y))[0] > 200]
+    assert left and right and min(right) < min(left)  # one corner higher: lopsided

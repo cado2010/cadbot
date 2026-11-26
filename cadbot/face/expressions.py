@@ -13,7 +13,7 @@ from typing import Literal
 from cadbot.vendor.roboeyes import ANGRY, CURIOUS, DEFAULT, HAPPY, NW, TIRED, E, N, S, W
 
 Mouth = Literal["smile_slight", "smile", "smile_big", "frown", "frown_soft", "flat",
-                "flat_soft", "wavy", "small_o", "closed"]
+                "flat_soft", "wavy", "small_o", "closed", "hmm"]
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ EXPRESSIONS: dict[str, Expression] = {
     "neutral": Expression(DEFAULT, mouth="smile_slight", idle=True),
     "listening": Expression(DEFAULT, mouth="closed", eye_scale=(1.0, 1.15)),
     "thinking": Expression(DEFAULT, NW, mouth="flat"),
-    "curious": Expression(CURIOUS, E, mouth="small_o"),
+    "curious": Expression(CURIOUS, E, mouth="hmm"),  # searching, interested: a half-smile
     "happy": Expression(HAPPY, mouth="smile"),
     "laughing": Expression(HAPPY, mouth="smile_big", anim="laugh"),
     "sad": Expression(TIRED, S, mouth="frown"),
