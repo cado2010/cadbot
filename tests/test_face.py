@@ -262,3 +262,24 @@ def test_small_window_shows_the_whole_portrait_screen() -> None:
         assert events == [InputEvent("pointer_down", pos=(360, 640))]
     finally:
         display.close()
+
+
+def test_smiling_eyes_keep_the_pupil_visible(display: PygameDisplay) -> None:
+    from cadbot.face.renderer import HAPPY_LID_RATIO, PUPIL, SMILE_MAX_PUPIL_Y
+
+    face = Face(display)
+    assert face.eyes.happyLidRatio == HAPPY_LID_RATIO < 0.5  # shallower than RoboEyes' half
+    assert face.eyes.happyLidFlatness > 0  # gentle curve, not the eye's tight corners
+    face.set_gaze_point((0.3, 1.0))  # the person is below the camera
+    for name in ("happy", "laughing"):
+        face.set(name)
+        face.eyes.set_auto_blinker(0)
+        for _ in range(40):
+            face.eyes.fpsTimer = -10_000
+            face.tick()
+        assert face._pupil[1] <= SMILE_MAX_PUPIL_Y + 0.01  # pupils stay above the lid
+        assert bytes(PUPIL) in pygame.image.tobytes(display.surface, "RGB"), name
+    face.set("neutral")  # not smiling: looking down is allowed again
+    for _ in range(40):
+        face.tick()
+    assert face._pupil[1] > 0.9

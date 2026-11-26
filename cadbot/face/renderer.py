@@ -26,7 +26,7 @@ from cadbot.face.expressions import DEFAULT_PRESETS, EXPRESSIONS, LOOKS, Express
 from cadbot.face.fb_pygame import PygameFrameBuffer
 from cadbot.face.mouth import draw_mouth
 from cadbot.platform.base import LOGICAL_SCREEN, Display, InputEvent
-from cadbot.vendor.roboeyes import DEFAULT, NE, NW, OFF, ON, SE, SW, E, N, RoboEyes, S, W
+from cadbot.vendor.roboeyes import DEFAULT, HAPPY, NE, NW, OFF, ON, SE, SW, E, N, RoboEyes, S, W
 
 if TYPE_CHECKING:
     from cadbot.vision.loop import Preview
@@ -42,6 +42,9 @@ EYE_AREA = pygame.Rect((SCREEN_W - EYE_LOGICAL[0] * SCALE) // 2, 360,
                        EYE_LOGICAL[0] * SCALE, EYE_LOGICAL[1] * SCALE)
 BASE_EYE = {"width": 38, "height": 41, "radius": 18, "spacing": 40}
 MOUTH_GAP = 20  # logical units between the bottom of the eyes and the mouth
+HAPPY_LID_RATIO = 0.32  # how much of the eye the smiling lower lid covers (RoboEyes: 0.5)
+HAPPY_LID_FLATNESS = 0.8  # how flat its edge is (0 = RoboEyes' tightly rounded curve)
+SMILE_MAX_PUPIL_Y = 0.15  # while smiling, the pupils don't look down into the lower lid
 MOUTH_CENTRE = (EYE_AREA.centerx,
                 EYE_AREA.y + round((EYE_LOGICAL[1] / 2 + BASE_EYE["height"] / 2 + MOUTH_GAP)
                                    * SCALE))
@@ -111,6 +114,9 @@ class Face:
         self.eyes = RoboEyes(self.fb, *EYE_LOGICAL, frame_rate=fps, on_show=self._on_show)
         self.eyes.eyes_radius(BASE_EYE["radius"], BASE_EYE["radius"])
         self.eyes.eyes_spacing(BASE_EYE["spacing"])
+        # Smiling eyes: a shallow, gently curved lower lid that leaves the pupil visible.
+        self.eyes.happyLidRatio = HAPPY_LID_RATIO
+        self.eyes.happyLidFlatness = HAPPY_LID_FLATNESS
         self.eyes.open()
         self.set("neutral")
 
@@ -215,6 +221,8 @@ class Face:
             x, y = 0.0, 0.0
         if now < self._confused_until:  # a quick puzzled look from side to side
             x += 0.6 * math.sin(now * 28)
+        if spec.mood == HAPPY:  # keep the pupils above the smiling lower lid
+            y = min(y, SMILE_MAX_PUPIL_Y)
         return max(-1.0, min(1.0, x)), max(-1.0, min(1.0, y))
 
     def _update_pupils(self) -> None:

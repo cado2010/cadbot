@@ -214,6 +214,11 @@ class RoboEyes():
 		self.eyelidsHappyBottomOffsetMax = int(self.eyeLheightDefault/2)+3
 		self.eyelidsHappyBottomOffset = 0
 		self.eyelidsHappyBottomOffsetNext = 0
+		# cadbot change 2026-11-26: tunable happy lower eyelid. happyLidRatio is the share of the
+		# eye height it covers (upstream: 0.5); happyLidFlatness > 0 draws a wider, flatter
+		# curve instead of the eye's own rounded corners (0 = upstream look).
+		self.happyLidRatio = 0.5
+		self.happyLidFlatness = 0
 		# Space between eyes
 		self.spaceBetweenCurrent = self.spaceBetweenDefault
 		self.spaceBetweenNext = 10
@@ -728,7 +733,8 @@ class RoboEyes():
 		else:
 			self.eyelidsAngryHeightNext = 0
 		if self.happy:
-			self.eyelidsHappyBottomOffsetNext = self.eyeLheightCurrent//2
+			# cadbot change 2026-11-26: cover happyLidRatio of the eye (upstream: half)
+			self.eyelidsHappyBottomOffsetNext = int(self.eyeLheightCurrent*self.happyLidRatio)
 		else:
 			self.eyelidsHappyBottomOffsetNext = 0
 
@@ -757,10 +763,24 @@ class RoboEyes():
 
 		# Draw happy bottom eyelids
 		self.eyelidsHappyBottomOffset = (self.eyelidsHappyBottomOffset + self.eyelidsHappyBottomOffsetNext)//2
-		self.gfx.fill_rrect( self.eyeLx-1, (self.eyeLy+self.eyeLheightCurrent)-self.eyelidsHappyBottomOffset+1, self.eyeLwidthCurrent+2, self.eyeLheightDefault, self.eyeLborderRadiusCurrent, self.bgcolor ) # left eye		
-		if not self._cyclops:
-			self.gfx.fill_rrect( self.eyeRx-1, (self.eyeRy+self.eyeRheightCurrent)-self.eyelidsHappyBottomOffset+1, self.eyeRwidthCurrent+2, self.eyeRheightDefault, self.eyeRborderRadiusCurrent, self.bgcolor ) # right eye		
+		# cadbot change 2026-11-26: optional flatter happy lid (an ellipse much wider than the eye)
+		if self.happyLidFlatness > 0:
+			if self.eyelidsHappyBottomOffset > 0:
+				self._flat_happy_lid( self.eyeLx, self.eyeLy, self.eyeLwidthCurrent, self.eyeLheightCurrent, self.eyeLheightDefault )
+				if not self._cyclops:
+					self._flat_happy_lid( self.eyeRx, self.eyeRy, self.eyeRwidthCurrent, self.eyeRheightCurrent, self.eyeRheightDefault )
+		else:
+			self.gfx.fill_rrect( self.eyeLx-1, (self.eyeLy+self.eyeLheightCurrent)-self.eyelidsHappyBottomOffset+1, self.eyeLwidthCurrent+2, self.eyeLheightDefault, self.eyeLborderRadiusCurrent, self.bgcolor ) # left eye		
+			if not self._cyclops:
+				self.gfx.fill_rrect( self.eyeRx-1, (self.eyeRy+self.eyeRheightCurrent)-self.eyelidsHappyBottomOffset+1, self.eyeRwidthCurrent+2, self.eyeRheightDefault, self.eyeRborderRadiusCurrent, self.bgcolor ) # right eye		
 		
 		self.on_show( self ) # show drawings on display
 
 	# end of drawEyes method
+
+	# cadbot change 2026-11-26: a gently curved happy lower lid: the top of a wide ellipse
+	def _flat_happy_lid( self, x, y, width, height, default_height ):
+		top = (y+height)-self.eyelidsHappyBottomOffset+1
+		xr = int( width*(0.5+self.happyLidFlatness) )
+		yr = default_height
+		self.gfx.ellipse( x+width//2, top+yr, xr, yr, self.bgcolor, True )

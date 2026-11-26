@@ -20,5 +20,9 @@ Every change in `roboeyes.py` is marked in the code with a `cadbot change 2026-1
    the bottom of the screen; it now uses the Y constraint.
 3. **Continuous gaze:** new `look_at(x, y)` with x and y in -1..1, so the eyes can follow a
    person smoothly instead of jumping between the nine fixed positions.
+4. **Tunable smiling eyes (2026-11-26):** `happyLidRatio` sets how much of the eye the happy
+   lower eyelid covers (upstream: half), and `happyLidFlatness` > 0 draws it as the top of a
+   wide ellipse, a gentler curve than the eye's own rounded corners. The defaults keep
+   upstream's look; cadbot uses a shallower, flatter lid so the pupil stays visible.
 
 `__init__.py` and `_compat.py` are new files written for cadbot.

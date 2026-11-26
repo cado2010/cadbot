@@ -9,6 +9,8 @@ edges, so the eyes stay smooth on the full-resolution screen instead of being pi
 
 from __future__ import annotations
 
+import math
+
 import pygame
 
 Colour = tuple[int, int, int]
@@ -76,9 +78,18 @@ class PygameFrameBuffer:
 
     def ellipse(self, x: int, y: int, xr: int, yr: int, c: int, f: bool = False,
                 m: int = 0xF) -> None:
-        if xr > 0 and yr > 0:
+        if xr <= 0 or yr <= 0:
+            return
+        if not f:
             pygame.draw.ellipse(self.surface, self._c(c), self._r(x - xr, y - yr, 2 * xr, 2 * yr),
-                                0 if f else max(1, self.scale))
+                                max(1, self.scale))
+            return
+        s = self.scale  # filled: a polygon with an anti-aliased outline, for a smooth edge
+        points = [((x + xr * math.cos(t)) * s, (y + yr * math.sin(t)) * s)
+                  for t in (2 * math.pi * i / 96 for i in range(96))]
+        colour = self._c(c)
+        pygame.draw.polygon(self.surface, colour, points)
+        pygame.draw.aalines(self.surface, colour, True, points)
 
     def fill_rrect(self, x: int, y: int, w: int, h: int, r: int, c: int) -> None:
         fill_rounded_rect(self.surface, self._c(c), self._r(x, y, w, h), r * self.scale)
