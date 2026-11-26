@@ -4,7 +4,7 @@
 
 RoboEyes works in a small logical space (sized for tiny OLED screens). This adapter
 multiplies every coordinate by `scale` and draws at full resolution with anti-aliased
-edges, so the eyes stay smooth on a 1280x720 screen instead of being pixel-blown-up.
+edges, so the eyes stay smooth on the full-resolution screen instead of being pixel-blown-up.
 """
 
 from __future__ import annotations

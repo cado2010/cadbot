@@ -7,5 +7,5 @@ from __future__ import annotations
 from cadbot.platform.common.pygame_display import PygameDisplay
 
 
-def make_display() -> PygameDisplay:
+def make_display(_window_size: tuple[int, int] | None = None) -> PygameDisplay:
     return PygameDisplay(fullscreen=False, video_driver="dummy")

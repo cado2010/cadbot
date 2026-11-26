@@ -29,7 +29,7 @@ The bot is named cadbot, and it always introduces and refers to itself by that n
 | Clock / storage | APScheduler + SQLite | Wakes Claude at times it chose; Claude decides what happens |
 | Local UI (optional) | FastAPI page on the LAN | Status, live view, account setup |
 | Process mgmt | systemd service, watchdog, journald | Starts on boot, restarts on crash |
-| Face display | Touch Display 2 (5 in) + RoboEyes (MicroPython port, vendored) drawn with pygame-ce | Actuator: shows the expression Claude picks with set\_face |
+| Face display | Touch Display 2 (5 in, portrait 720×1280) + RoboEyes (MicroPython port, vendored) drawn with pygame-ce | Actuator: shows the expression Claude picks with set\_face |
 
 **Design rule:** every input — a changed frame, an utterance, a timer firing, a new email — becomes an event message to Claude, and Claude's tool calls are the only way anything happens. A few safety rules are fixed in code instead: the confirmation gate on sending email or deleting data, the memory privacy, incognito and group-mode storage rules, and the canned reply when the internet is down.
 
@@ -48,7 +48,7 @@ The 8 GB Pi 5 has enough memory; the real constraints are CPU heat and audio qua
 | Camera mount | 38 mm board-camera case with tripod thread + mini tripod | $12 | Or a gooseneck clip, or Dual Lock on the display's top edge |
 | Mic + speaker | USB speakerphone with mic array and echo cancellation (eMeet M0 Plus or Anker PowerConf class) | $50 | One puck on the desk; echo cancellation lets people interrupt it |
 | Presence sensor | LD2410C mmWave (2-pack) + jumper wires | $12 + $7 | Detects people in total darkness; GPIO UART |
-| Display | Raspberry Pi Touch Display 2, 5 in | $40 | Animated face; 1280×720 touchscreen; see Face display |
+| Display | Raspberry Pi Touch Display 2, 5 in | $40 | Animated face; 720×1280 touchscreen used in portrait; see Face display |
 | Stand | KKSB case stand for Pi 5 + 5" Touch Display 2 | about £29 | Holds the Pi behind the display; see Temporary frame below |
 | Optional | USB extension 2 m; 850 nm IR illuminator; micro-HDMI cable | $8; $25; $8 | Camera placement; dark rooms beyond the camera's LEDs; setup with a monitor |
 | Not needed | Raspberry Pi AI HAT+ (Hailo); Argon NEO 5 case | — | Vision runs in Claude; the case is replaced by the stand |
@@ -523,7 +523,20 @@ A 5-inch Raspberry Pi Touch Display 2 shows an animated robot face. Claude picks
 | Touch Display 2, 5 in — **chosen** | $40 | 110 × 62 mm active area; 155 × 88 mm overall | It sits on a desk, close up |
 | Touch Display 2, 7 in | $60 | 155 × 88 mm active area | The face should read from across a room |
 
-Both are 1280 × 720 with 5-point touch and a 500 cd/m² anti-glare screen. Each connects with a DSI ribbon cable and takes 5 V power from the Pi's GPIO pins; the box includes two ribbon cables, the power cable and eight M2.5 screws, and Raspberry Pi OS supports it out of the box ([Raspberry Pi](https://raspberrypi.com/products/touch-display-2), [CNX Software](https://www.cnx-software.com/2025/08/18/raspberry-pi-touch-display-2-gets-40-5-inch-variant-with-1280x720-resolution/)). Use the install guide to pick the ribbon cable for the Pi 5's smaller DSI port and to set landscape orientation.
+Both are 720 × 1280 (portrait; 1280 × 720 when rotated) with 5-point touch and a 500 cd/m² anti-glare screen. Each connects with a DSI ribbon cable and takes 5 V power from the Pi's GPIO pins; the box includes two ribbon cables, the power cable and eight M2.5 screws, and Raspberry Pi OS supports it out of the box ([Raspberry Pi](https://raspberrypi.com/products/touch-display-2), [CNX Software](https://www.cnx-software.com/2025/08/18/raspberry-pi-touch-display-2-gets-40-5-inch-variant-with-1280x720-resolution/)). Use the install guide to pick the ribbon cable for the Pi 5's smaller DSI port.
+
+**Orientation: portrait.** A face looks better on a tall screen than on a short, wide 5-inch one, so cadbot uses the display upright, in portrait (720 wide × 1280 tall). This is the panel's native orientation, so no rotation setting is needed in `config.txt`; check this when the hardware arrives, and if the desktop comes up rotated, remove any rotation line rather than adding one. Mount the display upright in the stand.
+
+**Screen layout (portrait, 720 × 1280)**
+
+| Area | Where | What |
+| --- | --- | --- |
+| Face | Centred across, just above the middle of the screen | The eyes and mouth. They never move around the screen; only the expression changes (eyelids, eye shape, blinks, mouth) and the pupils look toward the person in view |
+| Camera preview | Lower-left corner, 256 × 144 | Small mirrored view of what the camera sees, with face boxes (green: recognised, amber: not sure, white: unknown), so people can get themselves in frame. Screen only, never saved; `face.camera_preview` turns it off |
+| Stop button | Lower-right corner | Shown while cadbot is thinking or speaking; tapping it interrupts |
+| Status icon | Top-right corner | No-Wi-Fi icon while Claude can't be reached |
+
+**On the Windows PC** the same 720 × 1280 portrait screen is drawn exactly as on the Pi and shown scaled down in a 450 × 800 window (`face.window_size` in `config.yaml`; keep the 9:16 shape). Clicks map back to full-size screen positions, so the prototype behaves like the touchscreen. The window can be resized; the screen is letterboxed to keep its shape.
 
 **The face library**
 
@@ -541,7 +554,7 @@ What it gives you:
 
 1. A `PygameFrameBuffer` class with the drawing methods RoboEyes calls (`fill`, `fill_rect`, `rect`, `ellipse`, `poly` and the like), drawing on a pygame surface.
 2. Stand-ins for MicroPython's `time.ticks_ms()` and `time.ticks_diff()`, if the port uses them.
-3. RoboEyes draws on a small 320 × 180 surface, scaled 4× to the 1280 × 720 screen, which keeps its proportions and costs very little CPU.
+3. RoboEyes works in a small logical space (160 × 100 units for the eye area), and the adapter draws every shape 4× larger, straight onto the 720 × 1280 portrait screen with anti-aliased edges, so the eyes stay smooth and cost very little CPU.
 
 **What cadbot adds on top** (in its own `cadbot/face/` module, also GPL-3.0):
 
@@ -635,7 +648,7 @@ The eyes turn toward whoever cadbot is looking at and follow them as they move l
 
 Idle mode is paused while following and comes back when no one is in view. Gaze is only a direction on screen: nothing is stored, so it works the same in incognito and group mode.
 
-**Renderer sketch**
+**Renderer sketch** (from the original design, landscape and simplified; the implementation in `cadbot/face/renderer.py` draws the portrait layout above at full resolution)
 
 ```python
 # assistant/actuators/face.py: animates only; Claude chooses the expression
@@ -1043,7 +1056,7 @@ The app above the line is identical on every platform. Only the bottom row is sw
 | `Camera` | `read() → Frame(image, timestamp, is_night)`; `set_focus`, `set_exposure` | OpenCV `CAP_DSHOW` (or `CAP_MSMF`), MJPG; `is_night` always false | OpenCV `CAP_V4L2`, MJPG, `v4l2-ctl` for focus/exposure; `is_night` when the frame has no colour (IR mode) | Plays images or a video file |
 | `AudioIn` | 16 kHz mono chunks, device chosen by name | `sounddevice` on WASAPI | `sounddevice` on ALSA/PipeWire (speakerphone) | Plays WAV files |
 | `AudioOut` | `play(pcm)`, `stop()`, `level()` for the mouth | `sounddevice` on WASAPI | `sounddevice` on ALSA/PipeWire | Records to memory |
-| `Display` | 1280×720 surface, `present()`, touch/click/key events | pygame window (resizable or borderless); mouse = touch | pygame full screen with `SDL_VIDEODRIVER=kmsdrm`; real touch | pygame offscreen (`SDL_VIDEODRIVER=dummy`), saves screenshots |
+| `Display` | 720×1280 portrait surface, `present()`, touch/click/key events | portrait pygame window, 450×800 by default (the Pi screen scaled down); mouse = touch | pygame full screen, native portrait, with `SDL_VIDEODRIVER=kmsdrm`; real touch | pygame offscreen (`SDL_VIDEODRIVER=dummy`), saves screenshots |
 | `PresenceSensor` | `present()`, `distance_cm()` | Key toggle, or an LD2410C on a USB-serial COM port via `pyserial` | LD2410C on the GPIO UART (`/dev/serial0`) via `pyserial` | Scripted timeline |
 | `PrivacySwitch` | `is_private()`, `set_led(on)` | Key toggle plus an on-screen indicator | GPIO switch and LED via `gpiozero` | Scripted |
 | `WifiScanner` | `scan() → [(bssid, rssi_dbm, ssid)]` | `netsh wlan show networks mode=bssid` (signal % converted to dBm) | `nmcli -t -f BSSID,SIGNAL,SSID dev wifi list` | Fixture file |
@@ -1131,7 +1144,7 @@ Hardware on the PC: a USB webcam, a microphone and **headphones** (to avoid echo
 1. **Flash the OS.** Raspberry Pi Imager → Raspberry Pi OS (64-bit, Bookworm or later). In the Imager's settings: hostname `cadbot`, your user, Wi-Fi, SSH with your public key, time zone.
 2. **Update and boot from the SSD.** `sudo apt update && sudo apt full-upgrade`, then `sudo rpi-eeprom-update -a`. Copy the system to the USB NVMe drive (Imager or SD Card Copier), set USB boot first with `sudo raspi-config` → Advanced → Boot order, and reboot without the microSD.
 3. **Enable interfaces.** `sudo raspi-config` → Interface options → Serial port: login shell **off**, hardware **on** (for the LD2410C on `/dev/serial0`). GPIO needs nothing extra; `gpiozero` uses the `lgpio` backend on the Pi 5.
-4. **Connect the display.** Follow the Touch Display 2 install guide for the Pi 5 ribbon cable, power wires and the `config.txt` line for landscape orientation. Check touch works on the desktop before going headless.
+4. **Connect the display.** Follow the Touch Display 2 install guide for the Pi 5 ribbon cable and power wires. Keep the native portrait orientation (no rotation line in `config.txt`) and mount the display upright. Check touch works on the desktop before going headless.
 5. **Audio.** Plug in the speakerphone and make it the default input and output (`wpctl status`, then `wpctl set-default <id>`). Test with `arecord -d 3 test.wav && aplay test.wav`.
 6. **Camera.** Plug the Arducam into a blue USB 3 port. Check it with `v4l2-ctl --list-devices` and `v4l2-ctl --list-formats-ext` (look for MJPG 1280×720).
 7. **Run the setup script.** Clone the repo, then `sudo ./deploy/setup-pi.sh`: it installs system packages and uv, and creates the `cadbot` user, the folders, the systemd service and the update timer.

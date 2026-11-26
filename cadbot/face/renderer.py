@@ -25,7 +25,7 @@ import pygame
 from cadbot.face.expressions import DEFAULT_PRESETS, EXPRESSIONS, LOOKS, Expression
 from cadbot.face.fb_pygame import PygameFrameBuffer
 from cadbot.face.mouth import draw_mouth
-from cadbot.platform.base import Display, InputEvent
+from cadbot.platform.base import LOGICAL_SCREEN, Display, InputEvent
 from cadbot.vendor.roboeyes import DEFAULT, NE, NW, OFF, ON, SE, SW, E, N, RoboEyes, S, W
 
 if TYPE_CHECKING:
@@ -33,16 +33,21 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+SCREEN_W, SCREEN_H = LOGICAL_SCREEN  # 720 x 1280, portrait like the Pi's Touch Display 2
+MARGIN = 24
 SCALE = 4  # logical RoboEyes units -> screen pixels
-EYE_LOGICAL = (288, 120)
-EYE_AREA = pygame.Rect(64, 60, EYE_LOGICAL[0] * SCALE, EYE_LOGICAL[1] * SCALE)
+EYE_LOGICAL = (160, 100)
+# The area the eye pair sits in: centred across, a little above the middle of the screen.
+EYE_AREA = pygame.Rect((SCREEN_W - EYE_LOGICAL[0] * SCALE) // 2, 360,
+                       EYE_LOGICAL[0] * SCALE, EYE_LOGICAL[1] * SCALE)
 BASE_EYE = {"width": 38, "height": 41, "radius": 18, "spacing": 40}
 MOUTH_GAP = 20  # logical units between the bottom of the eyes and the mouth
 MOUTH_CENTRE = (EYE_AREA.centerx,
                 EYE_AREA.y + round((EYE_LOGICAL[1] / 2 + BASE_EYE["height"] / 2 + MOUTH_GAP)
                                    * SCALE))
-STOP_BUTTON = pygame.Rect(1090, 600, 160, 80)
-PREVIEW_RECT = pygame.Rect(24, 552, 256, 144)  # lower-left corner
+STOP_BUTTON = pygame.Rect(SCREEN_W - MARGIN - 160, SCREEN_H - MARGIN - 80, 160, 80)
+PREVIEW_RECT = pygame.Rect(MARGIN, SCREEN_H - MARGIN - 144, 256, 144)  # lower-left corner
+STATUS_ICON = (SCREEN_W - 70, 80)  # top-right
 BOX_COLOURS = {"known": (90, 210, 120), "unsure": (240, 180, 60), "unknown": (235, 235, 235)}
 
 BACKGROUND = (8, 10, 18)
@@ -242,7 +247,7 @@ class Face:
         if self.state.show_stop:
             self._draw_stop_button(screen)
         if self.state.status == "offline":
-            _draw_no_wifi(screen, (1200, 70))
+            _draw_no_wifi(screen, STATUS_ICON)
         self.display.present()
 
     def _mouth_centre(self, _eyes: RoboEyes | None = None) -> tuple[int, int]:

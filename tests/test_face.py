@@ -224,3 +224,41 @@ def test_preview_failure_never_breaks_the_face(display: PygameDisplay) -> None:
     face.preview = broken  # type: ignore[assignment]
     face.eyes.fpsTimer = -10_000
     face.tick()  # no exception
+
+
+def test_portrait_layout_fits_and_nothing_overlaps(display: PygameDisplay) -> None:
+    from cadbot.face.renderer import EYE_AREA, PREVIEW_RECT, STOP_BUTTON
+    from cadbot.platform.base import LOGICAL_SCREEN
+
+    screen = pygame.Rect((0, 0), LOGICAL_SCREEN)
+    assert LOGICAL_SCREEN == (720, 1280)  # portrait, like the Pi's Touch Display 2
+    face = Face(display)
+    mouth = pygame.Rect(0, 0, 300, 120)
+    mouth.center = face._mouth_centre()
+    for rect in (EYE_AREA, PREVIEW_RECT, STOP_BUTTON, mouth):
+        assert screen.contains(rect), rect
+    face_box = EYE_AREA.union(mouth)
+    assert not face_box.colliderect(PREVIEW_RECT) and not face_box.colliderect(STOP_BUTTON)
+    assert not PREVIEW_RECT.colliderect(STOP_BUTTON)
+    assert abs(EYE_AREA.centerx - screen.centerx) <= 1  # face centred across
+
+
+def test_small_window_shows_the_whole_portrait_screen() -> None:
+    from cadbot.platform.base import InputEvent
+
+    display = PygameDisplay(fullscreen=False, video_driver="dummy", window_size=(450, 800))
+    display.open()
+    try:
+        display.surface.fill((200, 0, 0))
+        display.present()
+        window = pygame.display.get_surface()
+        assert window.get_size() == (450, 800)
+        for corner in ((3, 3), (446, 796)):  # scaled to fill the window: no letterbox bars
+            r, g, b = window.get_at(corner)[:3]
+            assert r > 190 and g < 10 and b < 10
+        # a click in the small window maps back to full-size screen coordinates
+        pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(225, 400), button=1))
+        events = [e for e in display.poll_events() if e.kind == "pointer_down"]
+        assert events == [InputEvent("pointer_down", pos=(360, 640))]
+    finally:
+        display.close()

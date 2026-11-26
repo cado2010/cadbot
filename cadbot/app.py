@@ -97,7 +97,7 @@ class Runtime:
 
 async def run_app(platform: Platform, config: Config, api_key: str) -> int:
     models_dir = platform.paths.models_dir
-    display = platform.display()
+    display = platform.display(config.face.window_size)
     display.open()
     audio_out = platform.audio_out(config.audio.output_device)
     await audio_out.start()

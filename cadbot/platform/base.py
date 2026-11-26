@@ -23,8 +23,9 @@ PlatformName = Literal["windows", "pi", "fake"]
 AUDIO_SAMPLE_RATE = 16_000
 """Sample rate of every AudioIn chunk (mono float32)."""
 
-LOGICAL_SCREEN = (1280, 720)
-"""Size of the Display surface the app draws on, whatever the real window size."""
+LOGICAL_SCREEN = (720, 1280)
+"""Size of the Display surface the app draws on (portrait, like the Pi's 5-inch Touch Display
+2), whatever the real window size; smaller windows show it scaled down."""
 
 
 # --------------------------------------------------------------------------- data types
@@ -222,7 +223,7 @@ class Platform:
     _camera: Callable[[int], Camera]
     _audio_in: Callable[[str | None], AudioIn]
     _audio_out: Callable[[str | None], AudioOut]
-    _display: Callable[[], Display]
+    _display: Callable[[tuple[int, int] | None], Display]
     _presence: Callable[[], PresenceSensor]
     _privacy: Callable[[], PrivacySwitch]
     _wifi: Callable[[], WifiScanner]
@@ -236,8 +237,9 @@ class Platform:
     def audio_out(self, device: str | None = None) -> AudioOut:
         return self._audio_out(device)
 
-    def display(self) -> Display:
-        return self._display()
+    def display(self, window_size: tuple[int, int] | None = None) -> Display:
+        """`window_size` sizes the window on desktop platforms; full screen ignores it."""
+        return self._display(window_size)
 
     def presence_sensor(self) -> PresenceSensor:
         return self._presence()

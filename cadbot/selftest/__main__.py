@@ -118,12 +118,19 @@ async def check_camera(platform: Platform) -> str:
 def _show_frame(platform: Platform, image: np.ndarray) -> None:
     import pygame
 
-    display = platform.display()
+    config = load_config(platform.name, platform.paths.config_dir)
+    display = platform.display(config.face.window_size)
     display.open()
     try:
         rgb = np.ascontiguousarray(image[..., ::-1])
         surface = pygame.surfarray.make_surface(rgb.swapaxes(0, 1))
-        pygame.transform.smoothscale(surface, display.surface.get_size(), display.surface)
+        screen = display.surface
+        screen_w, screen_h = screen.get_size()
+        width = screen_w  # fit the (landscape) camera image across the portrait screen
+        height = round(width * surface.get_height() / surface.get_width())
+        screen.fill((0, 0, 0))
+        screen.blit(pygame.transform.smoothscale(surface, (width, height)),
+                    (0, (screen_h - height) // 2))
         display.present()
         end = time.monotonic() + 3
         while time.monotonic() < end:
@@ -190,7 +197,8 @@ async def check_face(platform: Platform) -> str:
     from cadbot.face.expressions import EXPRESSIONS
     from cadbot.face.renderer import Face
 
-    display = platform.display()
+    config = load_config(platform.name, platform.paths.config_dir)
+    display = platform.display(config.face.window_size)
     display.open()
     try:
         face = Face(display)

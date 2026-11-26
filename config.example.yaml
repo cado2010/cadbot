@@ -63,6 +63,7 @@ vision:
   camera_stale_s: 5         # no new frames this long: reconnect the camera
 
 face:
+  window_size: [450, 800]   # Windows only: scaled-down view of the Pi's 720x1280 portrait screen
   camera_preview: true      # small mirrored camera view, lower-left corner (screen only)
   gaze_gain: 1.8            # how strongly the pupils follow you; raise if they barely move
   gaze_flip: false          # true if the eyes look away from you instead of at you

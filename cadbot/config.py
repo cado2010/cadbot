@@ -103,6 +103,9 @@ class VisionConfig(_Section):
 
 class FaceConfig(_Section):
     fps: int = 30
+    window_size: tuple[int, int] = (450, 800)
+    """Windows only: the face window, a scaled-down view of the Pi's 720x1280 portrait
+    screen. Keep the 9:16 shape; the Pi always uses its full screen."""
     idle_after_speech_s: float = 2.5
     camera_preview: bool = True
     gaze_gain: float = Field(1.8, ge=0.5, le=4.0)
