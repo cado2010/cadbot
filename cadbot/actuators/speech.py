@@ -66,6 +66,7 @@ class SpeechOutput:
         self._interrupted = False
         self._active = 0
         self._last_end = 0.0
+        self._current_text = ""
         self.on_start: Callable[[], None] = lambda: None
         self.on_end: Callable[[], None] = lambda: None
 
@@ -76,6 +77,11 @@ class SpeechOutput:
     def recently_spoke(self, tail_s: float) -> bool:
         """True while speaking or within `tail_s` after (half-duplex mic muting)."""
         return self.speaking or (time.monotonic() - self._last_end) < tail_s
+
+    @property
+    def current_text(self) -> str:
+        """What is being said right now (empty when silent)."""
+        return self._current_text
 
     def level(self) -> float:
         return self.audio_out.level() if self.speaking else 0.0
@@ -93,7 +99,11 @@ class SpeechOutput:
         result.unspoken = list(sentences)
         async with self._lock:
             self._interrupted = False
-            return await self._speak(sentences, lang, result)
+            self._current_text = " ".join(sentences)
+            try:
+                return await self._speak(sentences, lang, result)
+            finally:
+                self._current_text = ""
 
     async def _speak(self, sentences: list[str], lang: str,
                      result: SpeechResult) -> SpeechResult:

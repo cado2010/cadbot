@@ -39,6 +39,7 @@ its own licence. Model and voice files are downloaded at install time by
 | File | Licence | Source (pinned commit) |
 | --- | --- | --- |
 | Whisper `small.en`, CTranslate2 conversion | MIT | huggingface.co/Systran/faster-whisper-small.en @ `d1d751a` |
+| Whisper `tiny.en`, CTranslate2 conversion (stop phrases) | MIT | huggingface.co/Systran/faster-whisper-tiny.en @ `0d3d19a` |
 | Piper voice `en_US-lessac-medium` | Voice trained on the Blizzard 2013 Lessac dataset; see the voice's `MODEL_CARD` and the dataset licence, which may restrict commercial use | huggingface.co/rhasspy/piper-voices @ `04ca88f` |
 | YuNet face detector `face_detection_yunet_2023mar.onnx` | MIT | huggingface.co/opencv/face_detection_yunet @ `3cc26e7` |
 | SFace face recognition `face_recognition_sface_2021dec.onnx` | Apache-2.0 | huggingface.co/opencv/face_recognition_sface @ `3d70824` |

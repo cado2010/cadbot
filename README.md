@@ -65,7 +65,7 @@ uv sync --extra dev
 Copy-Item .env.example .env
 notepad .env
 
-# 4. Download the speech, voice and face models (about 585 MB, checked against pinned hashes)
+# 4. Download the speech, voice and face models (about 665 MB, checked against pinned hashes)
 uv run python -m cadbot.models ensure
 
 # 5. Self-tests, then start cadbot
@@ -75,8 +75,10 @@ uv run python -m cadbot.selftest --api
 uv run python -m cadbot
 ```
 
-Talk to it; it answers through the headphones. Press **Esc** or click **Stop** in the face
-window to cut it off; close the window to quit. See whom it remembers with
+Talk to it; it answers through the headphones. To cut it off, say "stop" or "never mind"
+(also "cancel", "be quiet", "that's enough", "hold on"), press **Esc**, or click **Stop** in
+the face window; close the window to quit. With headphones you can set
+`audio.headphones: true` in `config.yaml`, and then anything you say interrupts it. See whom it remembers with
 `uv run python -m cadbot.admin people`.
 
 The face window is portrait, like the Pi's 5-inch touchscreen: the same 720×1280 screen,

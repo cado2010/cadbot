@@ -12,6 +12,9 @@ audio:
   pre_roll_ms: 300          # audio kept from just before speech started
   half_duplex_tail_ms: 300  # without echo cancellation: mic stays muted this long after speaking
   barge_in_min_s: 0.4       # with echo cancellation: speech this long interrupts cadbot
+  headphones: null          # true if cadbot's voice can't reach the mic: then any speech interrupts
+  stop_phrases_enabled: true  # "stop", "never mind"... interrupt cadbot even through speakers
+  # stop_phrases: [stop, never mind, cancel, be quiet, that's enough, hold on, wait]
 
 stt:
   model: small.en           # faster-whisper model; base.en if the Pi is too slow
@@ -21,6 +24,7 @@ stt:
   beam_size: 1
   language: en
   hotwords: cadbot           # helps Whisper hear the name correctly
+  stop_model: tiny.en       # fast model that listens for "stop" while cadbot talks
 
 tts:
   voices:

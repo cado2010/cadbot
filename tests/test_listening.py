@@ -7,9 +7,11 @@ from __future__ import annotations
 import asyncio
 
 import numpy as np
+import pytest
 
 from cadbot.bus import EventBus, Utterance
 from cadbot.sensors.listener import Listener, ListenerHooks
+from cadbot.sensors.stop_phrases import match_stop_phrase
 from cadbot.sensors.stt import Transcript
 from cadbot.sensors.vad import (
     FRAME,
@@ -71,24 +73,29 @@ def test_silero_model_runs_on_silence() -> None:
 class FakeSpeechState:
     def __init__(self) -> None:
         self.speaking = False
+        self.current_text = ""
 
     def recently_spoke(self, tail_s: float) -> bool:
         return self.speaking
 
 
 class FakeSTT:
+    def __init__(self, text: str = "what's the weather") -> None:
+        self.text = text
+
     def transcribe(self, audio: np.ndarray) -> Transcript | None:
-        return Transcript("what's the weather", "en")
+        return Transcript(self.text, "en")
 
 
 def make_listener(echo_cancellation: bool, hooks: ListenerHooks | None = None,
+                  heard: str = "what's the weather",
                   ) -> tuple[Listener, EventBus, FakeSpeechState]:
     bus = EventBus()
     state = FakeSpeechState()
     listener = Listener(
         audio_in=None,  # type: ignore[arg-type]  # process() is driven directly
         vad=lambda frame: float(frame[0]), segmenter=SpeechSegmenter(SegmenterConfig()),
-        stt=FakeSTT(), bus=bus, speech_state=state, echo_cancellation=echo_cancellation,
+        stt=FakeSTT(heard), bus=bus, speech_state=state, echo_cancellation=echo_cancellation,
         hooks=hooks)
     return listener, bus, state
 
@@ -125,3 +132,83 @@ async def test_barge_in_with_echo_cancellation() -> None:
         listener.process(f)
     event = await asyncio.wait_for(bus.get(), 2)
     assert isinstance(event, Utterance) and event.during_speech
+
+
+# ----------------------------------------------------------------------- "stop" while speaking
+
+
+@pytest.mark.parametrize(("heard", "phrase"), [
+    ("Stop.", "stop"), ("Never mind!", "never mind"), ("cadbot, stop", "stop"),
+    ("OK, stop it please", "stop it"), ("Hold on", "hold on"), ("That's enough.", "that's enough"),
+    ("Okay cadbot, be quiet", "be quiet"), ("Wait, what was that?", "wait"),
+])
+def test_stop_phrases_are_recognised(heard: str, phrase: str) -> None:
+    assert match_stop_phrase(heard) == phrase
+
+
+@pytest.mark.parametrize("heard", [
+    "what's the weather", "please don't stop the music now ok", "the bus stop is close",
+    "I can't wait to see what happens tomorrow at the park", "",
+])
+def test_ordinary_speech_is_not_a_stop(heard: str) -> None:
+    assert match_stop_phrase(heard) is None
+
+
+def test_its_own_voice_is_not_a_stop() -> None:
+    # through speakers, cadbot may hear itself say "never mind"
+    assert match_stop_phrase("never mind", speaking="Never mind, I found it.") is None
+    assert match_stop_phrase("stop", speaking="It's the next stop on the line.") is None
+
+
+async def test_saying_stop_interrupts_even_with_the_mic_muted() -> None:
+    stops: list[str] = []
+    listener, bus, state = make_listener(
+        echo_cancellation=False, heard="Stop!",
+        hooks=ListenerHooks(on_stop_phrase=stops.append))
+    state.speaking = True
+    state.current_text = "Saturday looks sunny, around sixty degrees."
+    for f in frames(15, SPEECH) + frames(15, SILENCE):  # half a second of "stop"
+        listener.process(f)
+    event = await asyncio.wait_for(bus.get(), 2)
+    assert stops == ["Stop!"]
+    assert isinstance(event, Utterance) and event.text == "Stop!" and event.during_speech
+
+
+async def test_other_talk_while_muted_is_still_ignored() -> None:
+    stops: list[str] = []
+    listener, bus, state = make_listener(
+        echo_cancellation=False, heard="the weather is lovely",
+        hooks=ListenerHooks(on_stop_phrase=stops.append))
+    state.speaking = True
+    for f in frames(15, SPEECH) + frames(15, SILENCE):
+        listener.process(f)
+    await asyncio.sleep(0.05)
+    assert stops == [] and bus.empty()
+
+
+async def test_long_speech_while_muted_is_not_checked() -> None:
+    """cadbot's own sentences through speakers are long: they aren't even transcribed."""
+    calls: list[int] = []
+    listener, bus, state = make_listener(echo_cancellation=False, heard="stop")
+    original = listener.stt.transcribe
+
+    def counting(audio: np.ndarray) -> object:
+        calls.append(1)
+        return original(audio)
+
+    listener.stt.transcribe = counting  # type: ignore[method-assign]
+    state.speaking = True
+    for f in frames(int(2.4 * 1000 / FRAME_MS), SPEECH) + frames(15, SILENCE):
+        listener.process(f)
+    await asyncio.sleep(0.05)
+    assert calls == [] and bus.empty()
+
+
+async def test_stop_phrases_can_be_turned_off() -> None:
+    listener, bus, state = make_listener(echo_cancellation=False, heard="stop")
+    listener.stop_phrases = ()
+    state.speaking = True
+    for f in frames(15, SPEECH) + frames(15, SILENCE):
+        listener.process(f)
+    await asyncio.sleep(0.05)
+    assert bus.empty()

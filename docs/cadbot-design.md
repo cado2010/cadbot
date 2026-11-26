@@ -826,7 +826,8 @@ People can cut in at any point: while cadbot is speaking, while it's waiting on 
 | Speaking over cadbot | With echo cancellation (the speakerphone): speech lasting about 0.4 s or longer during playback or a pending request |
 | Tapping the stop button on the touchscreen | Always; the button appears whenever cadbot is speaking or thinking |
 | Pressing Esc (Windows PC) | Always, through the platform layer |
-| Speaking over cadbot without echo cancellation (PC speakers) | Not reliable, because the mic hears cadbot itself; the capabilities flag turns voice barge-in off, so use the button or Esc |
+| Saying a stop phrase ("stop", "never mind", "cancel", "be quiet", "that's enough", "hold on"...) | Always, even with PC speakers: while cadbot speaks, short utterances are checked for a stop phrase with the fast Whisper `tiny.en` model (about 0.6 s from the end of the word). Only an utterance that is nothing but a stop phrase counts, and not one cadbot is itself saying, so its own voice through the speakers doesn't trigger it. The phrases are configurable (`audio.stop_phrases`) |
+| Speaking over cadbot without echo cancellation (PC speakers) | Anything other than a stop phrase is ignored while cadbot speaks, because the mic hears cadbot itself (half-duplex). With headphones, set `audio.headphones: true` and any speech of about 0.4 s interrupts, as with the speakerphone |
 
 *The first half-second, in code.* Speed matters, so the Pi acts before Claude sees anything:
 

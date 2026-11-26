@@ -11,7 +11,7 @@ import logging
 import logging.handlers
 import sys
 from collections.abc import Coroutine
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -128,7 +128,8 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
                            interval_s=config.net.health_interval_s,
                            failures_before_offline=config.net.failures_before_offline,
                            on_change=on_health_change)
-    system_prompt = build_system_prompt(platform.capabilities, platform.name,
+    capabilities = replace(platform.capabilities, echo_cancellation=echo_free(platform, config))
+    system_prompt = build_system_prompt(capabilities, platform.name,
                                         config.household.wishes, camera=camera_mode(config))
 
     people = open_people(platform, config)
@@ -169,6 +170,7 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
     log.info("loading Whisper %s ...", config.stt.model)
     stt = WhisperTranscriber(whisper_dir(models_dir), config.stt)
     await asyncio.to_thread(stt.load)
+    stop_stt = await load_stop_model(models_dir, config)
 
     def on_speech_start() -> None:
         if not agent.busy:
@@ -177,15 +179,18 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
     listener = Listener(
         audio_in=platform.audio_in(config.audio.input_device), vad=SileroVad(),
         segmenter=SpeechSegmenter(segmenter_config(config)), stt=stt, bus=bus,
-        speech_state=speech, echo_cancellation=platform.capabilities.echo_cancellation,
+        speech_state=speech, echo_cancellation=capabilities.echo_cancellation,
         half_duplex_tail_s=config.audio.half_duplex_tail_ms / 1000,
         barge_in_min_s=config.audio.barge_in_min_s,
         hooks=ListenerHooks(
             on_speech_start=on_speech_start,
             on_speech_discarded=lambda: None if agent.busy else face.schedule_preset("idle", 0.5),
             on_barge_in=lambda: agent.interrupt("their voice"),
+            on_stop_phrase=lambda said: agent.interrupt(f'saying "{said}"'),
         ),
-        snapshot=vision.snapshot if vision is not None else lambda: None)
+        snapshot=vision.snapshot if vision is not None else lambda: None,
+        stop_phrases=tuple(config.audio.stop_phrases) if config.audio.stop_phrases_enabled
+        else (), stop_stt=stop_stt)
 
     runtime.spawn(face.run(), "face")
     runtime.spawn(canned.render_all(), "canned")
@@ -216,6 +221,30 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
         if location is not None:
             location.store.close()
     return 0
+
+
+async def load_stop_model(models_dir: Path, config: Config) -> WhisperTranscriber | None:
+    """The fast Whisper model for catching "stop" mid-speech; None falls back to the main
+    (slower) model."""
+    name = config.stt.stop_model
+    if not name or not config.audio.stop_phrases_enabled:
+        return None
+    folder = whisper_dir(models_dir, name)
+    if not (folder / "model.bin").is_file():
+        log.warning("Whisper %s missing (run `python -m cadbot.models ensure`); stop phrases "
+                    "will be slower to take effect", name)
+        return None
+    stop_cfg = config.stt.model_copy(update={"model": name, "hotwords": config.stt.stop_hotwords})
+    model = WhisperTranscriber(folder, stop_cfg)
+    await asyncio.to_thread(model.load)
+    return model
+
+
+def echo_free(platform: Platform, config: Config) -> bool:
+    """Can people talk over cadbot? Yes with headphones or an echo-cancelling speakerphone."""
+    if config.audio.headphones is not None:
+        return config.audio.headphones
+    return platform.capabilities.echo_cancellation
 
 
 async def start_location(platform: Platform, config: Config,

@@ -14,6 +14,8 @@ _HF = "https://huggingface.co"
 
 WHISPER_REPO, WHISPER_REV = "Systran/faster-whisper-small.en", \
     "d1d751a5f8271d482d14ca55d9e2deeebbae577f"
+TINY_REPO, TINY_REV = "Systran/faster-whisper-tiny.en", \
+    "0d3d19a32d3338f10357c0889762bd8d64bbdeba"
 PIPER_REPO, PIPER_REV = "rhasspy/piper-voices", "04ca88f5685ca5253c701af3687e155b113bd512"
 YUNET_REPO, YUNET_REV = "opencv/face_detection_yunet", "3cc26e7f1014a5ee5d74a42acee58bafc9d0a310"
 SFACE_REPO, SFACE_REV = "opencv/face_recognition_sface", \
@@ -41,6 +43,12 @@ def _whisper(name: str, sha256: str, size: int) -> ModelFile:
                      _hf(WHISPER_REPO, WHISPER_REV, name), sha256, size, "MIT")
 
 
+def _tiny(name: str, sha256: str, size: int) -> ModelFile:
+    """Whisper tiny.en: fast enough to catch "stop" while cadbot is talking."""
+    return ModelFile("whisper-stop", f"whisper/tiny.en/{name}",
+                     _hf(TINY_REPO, TINY_REV, name), sha256, size, "MIT")
+
+
 _VOICE_DIR = "en/en_US/lessac/medium"
 _VOICE_LICENCE = "see MODEL_CARD (Blizzard 2013 Lessac dataset licence)"
 
@@ -60,6 +68,14 @@ MANIFEST: tuple[ModelFile, ...] = (
              "929c5252409436dce1b38a75d1abbcb5e132d170d8e324e4e04ed915fa2d22df", 2_128_466),
     _whisper("vocabulary.txt",
              "ff77588746d3a2595d32ab5b69ffd7b95ce2441ac57533cb66fc3eb575a115cf", 422_309),
+    _tiny("config.json",
+          "14b1b421a90349bc551b881461426b561a874049cb9e4c4864f2ca384f6a7cc5", 2317),
+    _tiny("model.bin",
+          "1a5afae06a4db91c975c9a9d78be5cc110ee4ea022ad57d55492e4550e936b2a", 75_537_502),
+    _tiny("tokenizer.json",
+          "929c5252409436dce1b38a75d1abbcb5e132d170d8e324e4e04ed915fa2d22df", 2_128_466),
+    _tiny("vocabulary.txt",
+          "ff77588746d3a2595d32ab5b69ffd7b95ce2441ac57533cb66fc3eb575a115cf", 422_309),
     _voice("en_US-lessac-medium.onnx",
            "5efe09e69902187827af646e1a6e9d269dee769f9877d17b16b1b46eeaaf019f", 63_201_294),
     _voice("en_US-lessac-medium.onnx.json",

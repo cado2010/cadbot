@@ -16,6 +16,8 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from cadbot.sensors.stop_phrases import DEFAULT_STOP_PHRASES
+
 log = logging.getLogger(__name__)
 
 
@@ -33,6 +35,12 @@ class AudioConfig(_Section):
     pre_roll_ms: int = 300
     half_duplex_tail_ms: int = 300
     barge_in_min_s: float = 0.4
+    headphones: bool | None = None
+    """True when cadbot's voice can't reach the mic (headphones, or an echo-cancelling
+    speakerphone): any speech then interrupts it. None: use the platform's default."""
+    stop_phrases_enabled: bool = True
+    """Interrupt cadbot when someone says a stop phrase, even through speakers."""
+    stop_phrases: list[str] = Field(default_factory=lambda: list(DEFAULT_STOP_PHRASES))
 
 
 class SttConfig(_Section):
@@ -43,6 +51,10 @@ class SttConfig(_Section):
     beam_size: int = 1
     language: str | None = "en"
     hotwords: str = "cadbot"
+    stop_model: str = "tiny.en"
+    """Small, fast Whisper model that listens for "stop" while cadbot talks ('' = use the
+    main model, which is slower)."""
+    stop_hotwords: str = "stop, never mind, cancel, wait, hold on, enough, quiet"
     """Words Whisper should expect, so it hears "cadbot" rather than "Kedbot"."""
 
 
