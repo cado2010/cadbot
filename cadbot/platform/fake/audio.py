@@ -86,7 +86,10 @@ class FakeAudioOut:
         try:
             duration = samples.size / sample_rate * self.speed
             try:
-                await asyncio.wait_for(self._stopped.wait(), timeout=duration)
+                # asyncio.timeout, not wait_for: on Python 3.11 wait_for can swallow a
+                # cancellation that arrives just as stop() ends the wait
+                async with asyncio.timeout(duration):
+                    await self._stopped.wait()
                 return False
             except TimeoutError:
                 self.played.append((samples, sample_rate))
