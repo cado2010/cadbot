@@ -535,8 +535,18 @@ Both are 720 × 1280 (portrait; 1280 × 720 when rotated) with 5-point touch and
 | Camera preview | Lower-left corner, 256 × 144 | Small mirrored view of what the camera sees, with face boxes (green: recognised, amber: not sure, white: unknown), so people can get themselves in frame. Screen only, never saved; `face.camera_preview` turns it off |
 | Stop button | Lower-right corner | Shown while cadbot is thinking or speaking; tapping it interrupts |
 | Status icon | Top-right corner | No-Wi-Fi icon while Claude can't be reached |
+| Card (when shown) | Whole screen below a title; the face shrinks into the top-right corner | Text or a picture Claude puts up with `show_card`; a Done button at the lower left closes it. See Cards |
 
 **On the Windows PC** the same 720 × 1280 portrait screen is drawn exactly as on the Pi and shown scaled down in a 450 × 800 window (`face.window_size` in `config.yaml`; keep the 9:16 shape). Clicks map back to full-size screen positions, so the prototype behaves like the touchscreen. The window can be resized; the screen is letterboxed to keep its shape.
+
+**Cards: showing text and pictures**
+
+When something is better read than heard, or someone asks to see something ("show me the recipe", "put the list on the screen", "show me a picture of a red panda", "how do I look?"), Claude calls `show_card` and says a one-line summary aloud.
+
+- **What's on screen:** the title top-left, the face shrunk into the top-right corner (it keeps its expression, its mouth moves while cadbot speaks, and the pupils still follow the person), the text or picture filling the screen below, and a **Done** button at the lower left. The camera preview is hidden while a card is up; the Stop button still appears while cadbot is speaking.
+- **Content:** plain text (lines, `- ` bullets), automatically sized to fit; and/or a picture: a direct link to a picture on the public web (Claude finds one with `web_search`, or opens a page with `web_fetch` to get the link), or `camera_photo` for the camera's current view, mirrored like a selfie. Pictures are fitted to the screen without stretching.
+- **Closing:** tapping Done, Esc on the PC (when cadbot isn't speaking), Claude calling `hide_card` when the person says "OK" or "done", or automatically after `agent.card_seconds` (2 minutes by default, or the `seconds` Claude asks for). When the person or the timer closes it, the next message to Claude says so, so its picture of the screen stays accurate.
+- **Safe downloads, enforced in code:** only http(s) links, only picture types (JPEG, PNG, GIF, WebP, BMP), at most 8 MB, at most three redirects, and never an address on the home network (each redirect is checked again), so a web page can't point cadbot at the router or other local devices. Pictures are scaled down to fit and are never saved; nothing about them goes back to Claude except whether it worked.
 
 **The face library**
 
@@ -744,7 +754,7 @@ async def on_event(event):          # observation, utterance, timer, email, inte
 | find\_person(name) / forget\_person(person\_id, confirm\_token?) | Pi (confirmation gate in code) | Finds a person by name or alias; erases everything about them after a separate spoken or web UI confirmation |
 | get\_help(topic?) | Pi (built from the tool registry) | What cadbot can do right now, filtered by who's asking, mode, platform and connected accounts; categories and example phrases |
 | confirm\_remember(person\_id, accepted, permanent?) | Pi (consent gate in code) | Saves a pending person only on a clear yes, with a consent record; on no, discards everything and files the visit under Anonymous |
-| show\_card(title, content) | Pi (display) | Puts bulky content (recipes, lists, directions) on the touchscreen instead of reading it aloud |
+| show\_card(title?, text?, image\_url?, camera\_photo?, seconds?) / hide\_card | Pi (display) | Puts text or a picture on the touchscreen (recipes, lists, directions, "show me..."), with the face shrunk into a corner, instead of reading it aloud; see Cards |
 
 **Help: "cadbot, what can you do?"**
 

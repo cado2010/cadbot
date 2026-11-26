@@ -22,6 +22,16 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from cadbot.face.card import CONTENT_AREA as CARD_CONTENT
+from cadbot.face.card import (
+    DONE_BUTTON,
+    MINI_FACE,
+    TITLE_AREA,
+    Card,
+    draw_done_button,
+    render_content,
+    render_title,
+)
 from cadbot.face.expressions import DEFAULT_PRESETS, EXPRESSIONS, LOOKS, Expression
 from cadbot.face.fb_pygame import PygameFrameBuffer
 from cadbot.face.mouth import draw_mouth
@@ -51,6 +61,11 @@ MOUTH_CENTRE = (EYE_AREA.centerx,
 STOP_BUTTON = pygame.Rect(SCREEN_W - MARGIN - 160, SCREEN_H - MARGIN - 80, 160, 80)
 PREVIEW_RECT = pygame.Rect(MARGIN, SCREEN_H - MARGIN - 144, 256, 144)  # lower-left corner
 STATUS_ICON = (SCREEN_W - 70, 80)  # top-right
+# What the corner shows while a card is up: the eyes and mouth, cropped from the full face.
+FACE_REGION = pygame.Rect(0, 0, 520, 382)
+FACE_REGION.center = (EYE_AREA.centerx,  # midway between the top of the eyes and the mouth
+                      (EYE_AREA.centery - BASE_EYE["height"] * SCALE // 2
+                       + MOUTH_CENTRE[1] + 30) // 2)
 BOX_COLOURS = {"known": (90, 210, 120), "unsure": (240, 180, 60), "unknown": (235, 235, 235)}
 
 BACKGROUND = (8, 10, 18)
@@ -72,6 +87,9 @@ DIRECTIONS: dict[int, tuple[float, float]] = {
 class FaceCallbacks:
     on_stop: Callable[[], None] = lambda: None
     on_quit: Callable[[], None] = lambda: None
+    on_card_closed: Callable[[str, str], None] = lambda _title, _reason: None
+    """(card title, why: "touch", "timeout" or "replaced") when a card goes away by itself
+    or by the person; not called when Claude closes it."""
 
 
 @dataclass
@@ -106,9 +124,13 @@ class Face:
         self.preview: Callable[[], Preview | None] | None = None
         """Camera preview source (lower-left corner); None hides it."""
         self._preview_surface: tuple[int, pygame.Surface] | None = None
+        self.card: Card | None = None
+        self._card_surfaces: tuple[Card, pygame.Surface, pygame.Surface] | None = None
         self._running = False
         self._version = 0
-        self.fb = PygameFrameBuffer(display.surface.subsurface(EYE_AREA), BACKGROUND, SCLERA,
+        # The face is drawn on its own canvas, then shown full size or shrunk into a corner.
+        self._canvas = pygame.Surface(LOGICAL_SCREEN)
+        self.fb = PygameFrameBuffer(self._canvas.subsurface(EYE_AREA), BACKGROUND, SCLERA,
                                     scale=SCALE)
         # RoboEyes draws once inside its constructor, so all state above must exist first.
         self.eyes = RoboEyes(self.fb, *EYE_LOGICAL, frame_rate=fps, on_show=self._on_show)
@@ -230,28 +252,55 @@ class Face:
         px, py = self._pupil
         self._pupil = (px + (tx - px) * 0.35, py + (ty - py) * 0.35)
 
+    # ----------------------------------------------------------------- cards
+
+    def show_card(self, card: Card) -> None:
+        """Put text or a picture on the screen; the face moves into the top-right corner."""
+        if self.card is not None:
+            self.callbacks.on_card_closed(self.card.title, "replaced")
+        self.card = card
+        self._card_surfaces = None
+
+    def hide_card(self, reason: str = "claude") -> bool:
+        """Back to the full face. Returns False if no card was showing."""
+        card, self.card = self.card, None
+        self._card_surfaces = None
+        if card is None:
+            return False
+        if reason != "claude":
+            self.callbacks.on_card_closed(card.title, reason)
+        return True
+
     def handle_events(self, events: list[InputEvent]) -> None:
         for event in events:
             if event.kind == "quit":
                 self.callbacks.on_quit()
-            elif self._is_stop(event):
-                self.callbacks.on_stop()
-
-    def _is_stop(self, event: InputEvent) -> bool:
-        if event.kind == "key":
-            return event.key == "escape"
-        return (event.kind == "pointer_down" and self.state.show_stop
-                and STOP_BUTTON.collidepoint(event.pos))
+            elif event.kind == "key" and event.key == "escape":
+                # Esc stops speech first; with nothing to stop, it closes the card
+                if self.card is not None and not self.state.show_stop:
+                    self.hide_card("touch")
+                else:
+                    self.callbacks.on_stop()
+            elif event.kind == "pointer_down":
+                if self.card is not None and DONE_BUTTON.collidepoint(event.pos):
+                    self.hide_card("touch")
+                elif self.state.show_stop and STOP_BUTTON.collidepoint(event.pos):
+                    self.callbacks.on_stop()
 
     def _on_show(self, eyes: RoboEyes) -> None:
         self._draw_irises(eyes)
         mouth = EXPRESSIONS[self.state.expression].mouth
-        screen = self.display.surface
-        _clear_outside(screen, EYE_AREA)
-        draw_mouth(screen, self._mouth_centre(eyes), mouth, open_amount=self.level(),
+        canvas = self._canvas
+        _clear_outside(canvas, EYE_AREA)
+        draw_mouth(canvas, self._mouth_centre(eyes), mouth, open_amount=self.level(),
                    intensity=self.state.intensity, scale=SCALE, colour=MOUTH_COLOUR)
-        if self.preview is not None:
-            self._draw_preview(screen)
+        screen = self.display.surface
+        if self.card is None:
+            screen.blit(canvas, (0, 0))
+            if self.preview is not None:
+                self._draw_preview(screen)
+        else:
+            self._draw_card(screen)
         if self.state.show_stop:
             self._draw_stop_button(screen)
         if self.state.status == "offline":
@@ -327,6 +376,21 @@ class Face:
                              face.clip(rect), 2, border_radius=4)
         pygame.draw.rect(screen, (70, 76, 92), rect.inflate(4, 4), 2, border_radius=8)
 
+    def _draw_card(self, screen: pygame.Surface) -> None:
+        assert self.card is not None
+        if self._card_surfaces is None or self._card_surfaces[0] is not self.card:
+            self._card_surfaces = (self.card, render_title(self.card.title),
+                                   render_content(self.card))
+        _, title, content = self._card_surfaces
+        screen.fill(BACKGROUND)
+        screen.blit(title, TITLE_AREA)
+        screen.blit(content, CARD_CONTENT)
+        # the face, shrunk into the top-right corner: same expression, mouth and pupils
+        face = self._canvas.subsurface(FACE_REGION)
+        screen.blit(pygame.transform.smoothscale(face, MINI_FACE.size), MINI_FACE)
+        pygame.draw.rect(screen, (40, 46, 62), MINI_FACE.inflate(6, 6), 3, border_radius=14)
+        draw_done_button(screen)
+
     def _draw_stop_button(self, screen: pygame.Surface) -> None:
         pygame.draw.rect(screen, (200, 60, 60), STOP_BUTTON, border_radius=18)
         if self._font is None and pygame.font.get_init():
@@ -337,6 +401,9 @@ class Face:
 
     def tick(self) -> None:
         self.handle_events(self.display.poll_events())
+        card = self.card
+        if card is not None and card.close_at is not None and time.monotonic() >= card.close_at:
+            self.hide_card("timeout")
         self._update_pupils()
         self.eyes.update()
 

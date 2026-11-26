@@ -33,6 +33,8 @@ agent:
   max_tool_rounds: 8
   speak_max_words: 60
   web_search_max_uses: 3
+  web_fetch_max_uses: 3
+  card_seconds: 120         # how long text or pictures stay on screen unless closed sooner
   fallbacks: default        # server-side fallback model on refusals; "off" to disable
   request_timeout_s: 60
   one_moment_after_s: 3

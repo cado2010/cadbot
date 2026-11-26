@@ -134,6 +134,10 @@ class Agent:
         """True while a turn (request, tools or speech) is in progress."""
         return self._current is not None
 
+    def add_note(self, text: str) -> None:
+        """Something Claude should know, sent with the next event (e.g. a card was closed)."""
+        self._notes.append(text)
+
     def take_missed(self) -> tuple[Utterance, ...]:
         missed, self._missed = tuple(self._missed), []
         return missed

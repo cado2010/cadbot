@@ -57,6 +57,9 @@ class AgentConfig(_Section):
     max_tool_rounds: int = 8
     speak_max_words: int = 60
     web_search_max_uses: int = 3
+    web_fetch_max_uses: int = 3
+    card_seconds: int = Field(120, ge=10, le=600)
+    """How long a card (text or picture on the screen) stays up unless closed sooner."""
     fallbacks: Literal["default", "off"] = "default"
     request_timeout_s: float = 60.0
     one_moment_after_s: float = 3.0

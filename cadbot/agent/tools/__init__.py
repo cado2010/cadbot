@@ -7,7 +7,7 @@ Later milestones register more tools here (one module each); nothing else change
 
 from __future__ import annotations
 
-from cadbot.agent.tools.help import WEB_SEARCH_HELP, all_local_tools
+from cadbot.agent.tools.help import WEB_FETCH_HELP, WEB_SEARCH_HELP, all_local_tools
 from cadbot.agent.tools.registry import ServerTool, ToolRegistry
 from cadbot.config import AgentConfig
 
@@ -24,4 +24,7 @@ def build_registry(config: AgentConfig,
     if user_location:
         search["user_location"] = user_location
     registry.register_server(ServerTool(search, WEB_SEARCH_HELP))
+    registry.register_server(ServerTool(
+        {"type": "web_fetch_20260209", "name": "web_fetch",
+         "max_uses": config.web_fetch_max_uses}, WEB_FETCH_HELP))
     return registry

@@ -157,6 +157,15 @@ async def run_app(platform: Platform, config: Config, api_key: str) -> int:
     face.callbacks.on_stop = lambda: agent.interrupt("the stop button or the Esc key")
     face.callbacks.on_quit = runtime.stop.set
 
+    def on_card_closed(title: str, reason: str) -> None:
+        name = f'"{title}"' if title else "on the screen"
+        how = {"touch": "by the person (Done or Esc)",
+               "timeout": "automatically, after its time ran out"}.get(reason)
+        if how:
+            agent.add_note(f"[Note: the card {name} was closed {how}; the full face is back.]")
+
+    face.callbacks.on_card_closed = on_card_closed
+
     log.info("loading Whisper %s ...", config.stt.model)
     stt = WhisperTranscriber(whisper_dir(models_dir), config.stt)
     await asyncio.to_thread(stt.load)

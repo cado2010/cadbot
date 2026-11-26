@@ -187,9 +187,12 @@ def test_events_carry_place_and_local_time() -> None:
 
 def test_web_search_knows_the_area() -> None:
     area = {"type": "approximate", "city": "Chicago", "country": "US"}
-    search = build_registry(AgentConfig(), area).api_definitions()[-1]
-    assert search["name"] == "web_search" and search["user_location"] == area
-    assert "user_location" not in build_registry(AgentConfig()).api_definitions()[-1]
+    def search_tool(registry_defs: list[dict[str, object]]) -> dict[str, object]:
+        return next(t for t in registry_defs if t["name"] == "web_search")
+
+    assert search_tool(build_registry(AgentConfig(), area).api_definitions())[
+        "user_location"] == area
+    assert "user_location" not in search_tool(build_registry(AgentConfig()).api_definitions())
 
 
 async def test_get_location_tool(harness: AgentHarness, store: LocationStore) -> None:

@@ -76,14 +76,18 @@ TOOL = Tool(
                   examples=("What can you do?", "How do I stop you?")),
 )
 
+WEB_FETCH_HELP = HelpInfo(
+    category="Search and translate", summary="Read a web page to answer from it",
+    examples=("What does the recipe on that page say?",), user_facing=False)
+
 WEB_SEARCH_HELP = HelpInfo(
     category="Search and translate", summary="Search the web for live facts and news",
     examples=("What's the weather this weekend?", "Who won the game last night?"))
 
 
 def all_local_tools() -> list[Tool]:
-    from cadbot.agent.tools import costs, face, location, people, speak, vision
+    from cadbot.agent.tools import card, costs, face, location, people, speak, vision
 
     return [face.SET_FACE, speak.TOOL, face.SET_FACE_PRESETS, TOOL,
             vision.SET_WATCH_INTERVAL, vision.SET_LISTENING, vision.SET_GAZE, *people.ALL,
-            costs.TOOL, location.TOOL]
+            costs.TOOL, location.TOOL, card.SHOW_CARD, card.HIDE_CARD]

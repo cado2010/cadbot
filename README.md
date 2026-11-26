@@ -82,6 +82,11 @@ window to cut it off; close the window to quit. See whom it remembers with
 The face window is portrait, like the Pi's 5-inch touchscreen: the same 720×1280 screen,
 shown at 450×800 on the PC (`face.window_size` in `config.yaml`; keep the 9:16 shape).
 
+Ask to see something ("show me the recipe", "show me a picture of a red panda", "how do I
+look?") and cadbot puts it on the screen, with its face shrunk into the top-right corner. Tap
+**Done** or say "OK, done" to bring the face back; it also closes by itself after 2 minutes
+(`agent.card_seconds`).
+
 The lower-left corner shows a small mirrored view of what the camera sees, so you can get
 yourself in frame: a green box means cadbot recognises you, amber that it isn't sure, white
 that it doesn't know you. It's shown on screen only and never saved; set

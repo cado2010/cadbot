@@ -138,8 +138,11 @@ async def test_request_params(harness: AgentHarness) -> None:
     assert names[:4] == ["set_face", "speak", "set_face_presets", "get_help"]
     assert {"set_watch_interval", "set_listening", "set_gaze", "remember_person",
             "confirm_remember", "update_person", "find_person", "forget_person"} <= set(names)
-    assert names[-1] == "web_search"
-    assert params["tools"][-1]["type"] == "web_search_20260209"
+    assert names[-2:] == ["web_search", "web_fetch"]
+    assert {"show_card", "hide_card"} <= set(names)
+    types = {t["name"]: t.get("type") for t in params["tools"]}
+    assert types["web_search"] == "web_search_20260209"
+    assert types["web_fetch"] == "web_fetch_20260209"
     assert "thinking" not in params and "temperature" not in params
 
 
